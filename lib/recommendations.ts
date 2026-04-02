@@ -11,7 +11,7 @@ import {
   resolveSpotifyPlaylistId,
   searchTracks
 } from "@/lib/spotify";
-import { average, canonicalTrackKey, clamp, normalize, releaseYear, seededValue, uniqueBy } from "@/lib/utils";
+import { average, canonicalTitleKey, canonicalTrackKey, clamp, normalize, releaseYear, seededValue, uniqueBy } from "@/lib/utils";
 import type {
   AudioFeatures,
   ContextInput,
@@ -98,6 +98,124 @@ function languageFit(track: SpotifyTrack, languagePreference: ContextInput["lang
         ? 1
         : 0.12;
   }
+}
+
+function timeOfDaySearchHints(timeOfDay: ContextInput["timeOfDay"]) {
+  switch (timeOfDay) {
+    case "morning":
+      return ["morning ambient", "dawn folk", "early day indie"];
+    case "afternoon":
+      return ["afternoon grooves", "warm indie soul", "daylight electronic"];
+    case "evening":
+      return ["evening soul", "golden hour indie", "nightfall pop"];
+    case "night":
+      return ["late night electronic", "midnight indie", "after dark soul"];
+  }
+}
+
+function contextOnlySearchQueries(context: ContextInput) {
+  return [
+    context.mood === "focused"
+      ? "instrumental indie electronic"
+      : context.mood === "calm"
+        ? "ambient folk dream pop"
+        : context.mood === "energetic"
+          ? "indie dance alternative"
+          : context.mood === "melancholic"
+            ? "art pop slowcore"
+            : "nu disco indie soul",
+    ...timeOfDaySearchHints(context.timeOfDay),
+    context.energyLevel === "high"
+      ? "upbeat alternative"
+      : context.energyLevel === "low"
+        ? "soft atmospheric"
+        : "midtempo discovery",
+    ...LANGUAGE_QUERY_HINTS[context.languagePreference]
+  ].filter(Boolean) as string[];
+}
+
+async function buildContextOnlyRecommendations(context: ContextInput) {
+  const dailySalt = `${new Date().toISOString().slice(0, 10)}:${context.refreshKey || "0"}`;
+  const queries = contextOnlySearchQueries(context);
+  const searchGroups = await Promise.all(
+    queries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
+  );
+  const candidates = uniqueTracks(searchGroups.flat()).filter(
+    (track) => !(context.excludeTrackIds || []).includes(track.id)
+  );
+  const audioFeaturesByTrackId = await getAudioFeatures(candidates.map((track) => track.id));
+  const pseudoProfile = {
+    averageFeatures: {
+      ...DEFAULT_AUDIO_FEATURES,
+      ...mapMoodToFeatures(context.mood),
+      ...mapTimeToFeatures(context.timeOfDay),
+      ...mapEnergyLevel(context.energyLevel)
+    },
+    dominantGenres: queries.slice(0, 4),
+    seedArtists: [],
+    seedTracks: [],
+    excludedTrackIds: new Set<string>(),
+    excludedTrackKeys: new Set<string>(),
+    seenArtistIds: new Set<string>()
+  } satisfies TasteProfile;
+  const target = buildTargetFeatures(pseudoProfile, context);
+
+  const ranked = candidates
+    .map((track) => {
+      const features = audioFeaturesByTrackId[track.id] || DEFAULT_AUDIO_FEATURES;
+      const similarity = clamp(1 - tasteDistance(target, features) / 1.7, 0, 1);
+      const contextFit =
+        clamp(1 - Math.abs(target.energy - features.energy), 0, 1) * 0.32 +
+        clamp(1 - Math.abs(target.valence - features.valence), 0, 1) * 0.18 +
+        clamp(1 - Math.abs(target.danceability - features.danceability), 0, 1) * 0.15 +
+        clamp(1 - Math.abs(target.tempo - features.tempo) / 70, 0, 1) * 0.2 +
+        languageFit(track, context.languagePreference) * 0.15;
+      const novelty = clamp(1 - normalize(track.popularity, 20, 90), 0, 1);
+      const score = similarity * 0.34 + contextFit * 0.38 + novelty * 0.22 + seededValue(`${dailySalt}:${track.id}`) * 0.06;
+
+      return {
+        ...track,
+        score,
+        similarity,
+        novelty,
+        contextFit,
+        reason: {
+          headline: "Light-profile discovery mode",
+          detail: `Spotify gave very little taste history, so this batch leans on your ${context.mood} / ${context.timeOfDay} vibe${
+            context.languagePreference !== "any" ? ` with a ${LANGUAGE_LABELS[context.languagePreference].toLowerCase()} bias` : ""
+          } while still trying to stay fresh.`
+        }
+      } satisfies RankedTrack;
+    })
+    .sort((left, right) => right.score - left.score);
+
+  const seenTitles = new Set<string>();
+  const finalTracks: RankedTrack[] = [];
+
+  for (const track of ranked) {
+    const titleKey = canonicalTitleKey(track);
+    if (seenTitles.has(titleKey)) {
+      continue;
+    }
+
+    seenTitles.add(titleKey);
+    finalTracks.push(track);
+
+    if (finalTracks.length === 24) {
+      break;
+    }
+  }
+
+  return {
+    profileSummary: {
+      dominantGenres: queries.slice(0, 5),
+      averageFeatures: {
+        energy: target.energy,
+        valence: target.valence
+      }
+    },
+    tracks: finalTracks
+  };
 }
 
 function uniqueTracks(tracks: SpotifyTrack[]) {
@@ -363,13 +481,7 @@ async function expandCandidates(
           : context.mood === "melancholic"
             ? "art pop"
             : "nu disco",
-    context.timeOfDay === "night"
-      ? "after hours"
-      : context.timeOfDay === "morning"
-        ? "sunrise indie"
-        : context.timeOfDay === "evening"
-          ? "twilight pop"
-          : "daytime grooves",
+    ...timeOfDaySearchHints(context.timeOfDay),
     context.energyLevel === "high"
       ? "high energy"
       : context.energyLevel === "low"
@@ -472,7 +584,7 @@ export async function generateDailyRecommendations(context: ContextInput) {
     source.friendSignalTracks.length;
 
   if (!hasProfileData) {
-    throw new Error("Spotify allowed login, but did not allow enough listening data for recommendations.");
+    return buildContextOnlyRecommendations(context);
   }
 
   const profile = await buildTasteProfile(source);
@@ -521,12 +633,15 @@ export async function generateDailyRecommendations(context: ContextInput) {
 
   const artistCap = new Map<string, number>();
   const trackKeyCap = new Set<string>();
+  const titleCap = new Map<string, number>();
   const finalTracks: RankedTrack[] = [];
 
   for (const track of ranked) {
     const leadArtistId = track.artists[0]?.id;
     const currentCount = leadArtistId ? artistCap.get(leadArtistId) || 0 : 0;
     const trackKey = canonicalTrackKey(track);
+    const titleKey = canonicalTitleKey(track);
+    const titleCount = titleCap.get(titleKey) || 0;
 
     if (leadArtistId && currentCount >= 1) {
       continue;
@@ -536,10 +651,15 @@ export async function generateDailyRecommendations(context: ContextInput) {
       continue;
     }
 
+    if (titleCount >= 1) {
+      continue;
+    }
+
     if (leadArtistId) {
       artistCap.set(leadArtistId, currentCount + 1);
     }
     trackKeyCap.add(trackKey);
+    titleCap.set(titleKey, titleCount + 1);
     finalTracks.push(track);
 
     if (finalTracks.length === 24) {
@@ -560,13 +680,7 @@ export async function generateDailyRecommendations(context: ContextInput) {
             : context.mood === "melancholic"
               ? "art pop"
               : "nu disco",
-      context.timeOfDay === "night"
-        ? "after hours"
-        : context.timeOfDay === "morning"
-          ? "sunrise indie"
-          : context.timeOfDay === "evening"
-            ? "evening alternative"
-            : "afternoon indie",
+      ...timeOfDaySearchHints(context.timeOfDay),
       ...LANGUAGE_QUERY_HINTS[context.languagePreference]
     ].filter(Boolean) as string[];
 
