@@ -1,8 +1,21 @@
 import { NextResponse } from "next/server";
 import { generateDailyRecommendations } from "@/lib/recommendations";
+import { SpotifyApiError } from "@/lib/spotify";
 import { getCurrentUserPlaylists, getCurrentUserProfile } from "@/lib/spotify";
 import { getValidSpotifyAccessToken } from "@/lib/spotify-auth";
 import type { ContextInput } from "@/types";
+
+async function fallbackOnSpotifyReadError<T>(work: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof SpotifyApiError && (error.status === 401 || error.status === 403)) {
+      return fallback;
+    }
+
+    throw error;
+  }
+}
 
 export async function GET() {
   const accessToken = await getValidSpotifyAccessToken();
@@ -14,7 +27,8 @@ export async function GET() {
   }
 
   try {
-    const [profile, playlists] = await Promise.all([getCurrentUserProfile(), getCurrentUserPlaylists()]);
+    const profile = await fallbackOnSpotifyReadError(() => getCurrentUserProfile(), null);
+    const playlists = await fallbackOnSpotifyReadError(() => getCurrentUserPlaylists(), []);
 
     return NextResponse.json({
       authenticated: true,
