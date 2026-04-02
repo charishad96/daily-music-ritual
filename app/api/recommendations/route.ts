@@ -18,15 +18,16 @@ async function fallbackOnSpotifyReadError<T>(work: () => Promise<T>, fallback: T
 }
 
 export async function GET() {
-  const accessToken = await getValidSpotifyAccessToken();
-
-  if (!accessToken) {
-    return NextResponse.json({
-      authenticated: false
-    });
-  }
-
   try {
+    const accessToken = await getValidSpotifyAccessToken();
+
+    if (!accessToken) {
+      return NextResponse.json({
+        authenticated: false,
+        debug: "missing_access_token"
+      });
+    }
+
     const profile = await fallbackOnSpotifyReadError(() => getCurrentUserProfile(), null);
     const playlists = await fallbackOnSpotifyReadError(() => getCurrentUserPlaylists(), []);
 
@@ -41,9 +42,10 @@ export async function GET() {
         tracksTotal: playlist.tracks.total
       }))
     });
-  } catch {
+  } catch (error) {
     return NextResponse.json({
-      authenticated: false
+      authenticated: false,
+      debug: error instanceof Error ? error.message : "unknown_error"
     });
   }
 }
@@ -77,3 +79,4 @@ export async function POST(request: Request) {
     );
   }
 }
+
