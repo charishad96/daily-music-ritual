@@ -11,8 +11,10 @@ export async function GET() {
       timeOfDay: "morning",
       energyLevel: "medium",
       decadePreference: "any",
+      languagePreference: "any",
       familiarity: 38,
       playlistIds: [],
+      friendPlaylistInputs: [],
       excludeTrackIds: [],
       refreshKey: "debug"
     });
