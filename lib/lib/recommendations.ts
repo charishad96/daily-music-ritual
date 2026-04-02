@@ -254,6 +254,46 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
     }
   }
 
+  if (!finalTracks.length) {
+    const widenedQueries = [
+      context.mood === "calm"
+        ? "ambient"
+        : context.mood === "focused"
+          ? "instrumental electronic"
+          : context.mood === "energetic"
+            ? "indie dance"
+            : context.mood === "melancholic"
+              ? "slowcore"
+              : "indie soul",
+      context.energyLevel === "high" ? "upbeat" : context.energyLevel === "low" ? "soft" : "midtempo"
+    ];
+    const widenedSearchGroups = await Promise.all(
+      widenedQueries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
+    );
+    const widenedTracks = uniqueTracks(widenedSearchGroups.flat()).slice(0, 24);
+
+    return {
+      profileSummary: {
+        dominantGenres: queries.slice(0, 5),
+        averageFeatures: {
+          energy: target.energy,
+          valence: target.valence
+        }
+      },
+      tracks: widenedTracks.map((track, index) => ({
+        ...track,
+        score: 0.32 - index * 0.001,
+        similarity: 0.42,
+        novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
+        contextFit: 0.44,
+        reason: {
+          headline: "Recovery fallback",
+          detail: "Your profile was too sparse for a strong first pass, so this batch widens the search instead of failing silently."
+        }
+      }))
+    };
+  }
+
   return {
     profileSummary: {
       dominantGenres: queries.slice(0, 5),
