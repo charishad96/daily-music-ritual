@@ -14,11 +14,13 @@ function clampLimit(limit: number, min: number, max: number) {
 export class SpotifyApiError extends Error {
   status: number;
   detail: string;
+  path: string;
 
-  constructor(status: number, detail: string) {
-    super(`Spotify API error (${status}): ${detail}`);
+  constructor(status: number, detail: string, path: string) {
+    super(`Spotify API error (${status}) on ${path}: ${detail}`);
     this.status = status;
     this.detail = detail;
+    this.path = path;
   }
 }
 
@@ -40,7 +42,7 @@ async function spotifyFetch<T>(path: string, options: SpotifyFetchOptions = {}):
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new SpotifyApiError(response.status, detail);
+    throw new SpotifyApiError(response.status, detail, path);
   }
 
   return response.json();
@@ -217,4 +219,3 @@ export async function addItemsToPlaylist(playlistId: string, uris: string[]) {
     body: JSON.stringify({ uris })
   });
 }
-
