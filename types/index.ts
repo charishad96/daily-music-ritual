@@ -64,6 +64,7 @@ export type TasteProfile = {
   seedArtists: SpotifyArtist[];
   seedTracks: SpotifyTrack[];
   excludedTrackIds: Set<string>;
+  excludedTrackKeys: Set<string>;
   seenArtistIds: Set<string>;
 };
 

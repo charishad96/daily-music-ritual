@@ -1,3 +1,5 @@
+import type { SpotifyTrack } from "@/types";
+
 export function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
 
@@ -68,4 +70,23 @@ export function releaseYear(dateString?: string): number | null {
 
   const year = Number(dateString.slice(0, 4));
   return Number.isNaN(year) ? null : year;
+}
+
+export function normalizeComparableText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\bfeat(?:uring)?\b.*$/g, "")
+    .replace(/\((?:[^)]*(?:live|remaster|mono|stereo|acoustic|edit|version|deluxe|demo|radio)[^)]*)\)/g, "")
+    .replace(/\[(?:[^\]]*(?:live|remaster|mono|stereo|acoustic|edit|version|deluxe|demo|radio)[^\]]*)\]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function canonicalTrackKey(track: SpotifyTrack) {
+  const leadArtist = normalizeComparableText(track.artists[0]?.name || "");
+  const title = normalizeComparableText(track.name);
+  return `${leadArtist}::${title}`;
 }

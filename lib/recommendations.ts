@@ -11,7 +11,7 @@ import {
   resolveSpotifyPlaylistId,
   searchTracks
 } from "@/lib/spotify";
-import { average, clamp, normalize, releaseYear, seededValue, uniqueBy } from "@/lib/utils";
+import { average, canonicalTrackKey, clamp, normalize, releaseYear, seededValue, uniqueBy } from "@/lib/utils";
 import type {
   AudioFeatures,
   ContextInput,
@@ -103,7 +103,7 @@ function languageFit(track: SpotifyTrack, languagePreference: ContextInput["lang
 function uniqueTracks(tracks: SpotifyTrack[]) {
   return uniqueBy(
     tracks.filter((track) => track?.id),
-    (track) => track.id
+    (track) => canonicalTrackKey(track)
   );
 }
 
@@ -272,6 +272,11 @@ export async function buildTasteProfile(source: ProfileSource): Promise<TastePro
       (track) => track.id
     )
   );
+  const excludedTrackKeys = new Set<string>(
+    [...source.topTracks, ...source.recentTracks, ...source.playlistTracks, ...source.friendSignalTracks].map((track) =>
+      canonicalTrackKey(track)
+    )
+  );
   const seenArtistIds = new Set<string>(
     [
       ...blendedArtists.map((artist) => artist.id),
@@ -285,6 +290,7 @@ export async function buildTasteProfile(source: ProfileSource): Promise<TastePro
     seedArtists: blendedArtists.slice(0, 10),
     seedTracks: seedTracks.slice(0, 10),
     excludedTrackIds,
+    excludedTrackKeys,
     seenArtistIds
   };
 }
@@ -385,6 +391,7 @@ async function expandCandidates(
   const filteredCandidates = candidates.filter(
     (track) =>
       !profile.excludedTrackIds.has(track.id) &&
+      !profile.excludedTrackKeys.has(canonicalTrackKey(track)) &&
       !(context.excludeTrackIds || []).includes(track.id) &&
       track.artists.every((artist) => !profile.seenArtistIds.has(artist.id) || context.familiarity > 55)
   );
@@ -513,19 +520,26 @@ export async function generateDailyRecommendations(context: ContextInput) {
     .sort((a, b) => b.score - a.score);
 
   const artistCap = new Map<string, number>();
+  const trackKeyCap = new Set<string>();
   const finalTracks: RankedTrack[] = [];
 
   for (const track of ranked) {
     const leadArtistId = track.artists[0]?.id;
     const currentCount = leadArtistId ? artistCap.get(leadArtistId) || 0 : 0;
+    const trackKey = canonicalTrackKey(track);
 
     if (leadArtistId && currentCount >= 1) {
+      continue;
+    }
+
+    if (trackKeyCap.has(trackKey)) {
       continue;
     }
 
     if (leadArtistId) {
       artistCap.set(leadArtistId, currentCount + 1);
     }
+    trackKeyCap.add(trackKey);
     finalTracks.push(track);
 
     if (finalTracks.length === 24) {
@@ -560,7 +574,7 @@ export async function generateDailyRecommendations(context: ContextInput) {
       emergencyQueries.map((query) => swallowSpotify403(() => searchTracks(query, 30), []))
     );
     const emergencyTracks = uniqueTracks(emergencySearchGroups.flat())
-      .filter((track) => !profile.excludedTrackIds.has(track.id))
+      .filter((track) => !profile.excludedTrackIds.has(track.id) && !profile.excludedTrackKeys.has(canonicalTrackKey(track)))
       .sort(
         (left, right) =>
           seededValue(`${dailySalt}:${right.id}`) +
