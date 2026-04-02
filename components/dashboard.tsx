@@ -322,23 +322,15 @@ export function Dashboard() {
                 <div className="flex flex-wrap gap-3">
                   <button
                     type="button"
-                    onClick={() => runRecommendations()}
-                    disabled={isLoading}
-                    className="rounded-full bg-dusk px-5 py-3 text-sm font-semibold text-white transition hover:bg-dusk/90 disabled:opacity-60"
-                  >
-                    {isLoading ? "Generating..." : tracks.length ? "Regenerate batch" : "Generate recommendations"}
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => {
                       const next = refreshCount + 1;
                       setRefreshCount(next);
                       void runRecommendations(next);
                     }}
-                    disabled={isLoading || !tracks.length}
-                    className="rounded-full border border-dusk/15 bg-white/80 px-5 py-3 text-sm font-semibold text-dusk transition hover:border-dusk/30 disabled:opacity-50"
+                    disabled={isLoading}
+                    className="rounded-full bg-dusk px-5 py-3 text-sm font-semibold text-white transition hover:bg-dusk/90 disabled:opacity-60"
                   >
-                    Refresh new batch
+                    {isLoading ? "Generating..." : tracks.length ? "New batch" : "Generate recommendations"}
                   </button>
                   <button
                     type="button"
