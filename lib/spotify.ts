@@ -11,6 +11,30 @@ function clampLimit(limit: number, min: number, max: number) {
   return Math.min(Math.max(limit, min), max);
 }
 
+export function resolveSpotifyPlaylistId(input: string) {
+  const value = input.trim();
+
+  if (!value) {
+    return null;
+  }
+
+  const uriMatch = value.match(/^spotify:playlist:([A-Za-z0-9]+)$/i);
+  if (uriMatch) {
+    return uriMatch[1];
+  }
+
+  const urlMatch = value.match(/spotify\.com\/playlist\/([A-Za-z0-9]+)/i);
+  if (urlMatch) {
+    return urlMatch[1];
+  }
+
+  if (/^[A-Za-z0-9]{10,}$/.test(value)) {
+    return value;
+  }
+
+  return null;
+}
+
 export class SpotifyApiError extends Error {
   status: number;
   detail: string;

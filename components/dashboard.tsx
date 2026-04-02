@@ -4,15 +4,17 @@ import Image from "next/image";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { ReactNode } from "react";
 import { formatDateLabel } from "@/lib/utils";
-import type { BootstrapResponse, ContextInput, RankedTrack } from "@/types";
+import type { BootstrapResponse, ContextInput, LanguagePreference, RankedTrack } from "@/types";
 
 const defaultContext: ContextInput = {
   mood: "focused",
   timeOfDay: "morning",
   energyLevel: "medium",
   decadePreference: "any",
+  languagePreference: "any",
   familiarity: 38,
-  playlistIds: []
+  playlistIds: [],
+  friendPlaylistInputs: []
 };
 
 const moods = ["calm", "focused", "energetic", "melancholic", "social"] as const;
@@ -25,6 +27,13 @@ const decadeOptions = [
   { value: "2010s", label: "2010s" },
   { value: "new", label: "New releases" }
 ] as const;
+const languageOptions: { value: LanguagePreference; label: string }[] = [
+  { value: "any", label: "Any language" },
+  { value: "english", label: "English" },
+  { value: "greek", label: "Greek" },
+  { value: "spanish", label: "Spanish" },
+  { value: "portuguese", label: "Portuguese" }
+];
 
 export function Dashboard() {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
@@ -60,6 +69,7 @@ export function Dashboard() {
       .filter((playlist) => context.playlistIds.includes(playlist.id))
       .map((playlist) => playlist.name);
   }, [bootstrap?.playlists, context.playlistIds]);
+  const friendSignalsSummary = context.friendPlaylistInputs.filter(Boolean).length;
 
   async function runRecommendations(nextRefreshCount = refreshCount) {
     setError(null);
@@ -254,6 +264,30 @@ export function Dashboard() {
                 </div>
               </ControlGroup>
 
+              <ControlGroup label="Language">
+                <div className="grid grid-cols-2 gap-2">
+                  {languageOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() =>
+                        setContext((current) => ({
+                          ...current,
+                          languagePreference: option.value
+                        }))
+                      }
+                      className={`rounded-2xl border px-3 py-2 text-sm transition ${
+                        context.languagePreference === option.value
+                          ? "border-dusk bg-dusk text-white"
+                          : "border-dusk/12 bg-white/70 text-ink/68 hover:border-dusk/25"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </ControlGroup>
+
               <ControlGroup label="Familiarity">
                 <input
                   type="range"
@@ -305,6 +339,27 @@ export function Dashboard() {
                   })}
                 </div>
               </ControlGroup>
+
+              <ControlGroup label="Channel friends' signals">
+                <textarea
+                  value={context.friendPlaylistInputs.join("\n")}
+                  onChange={(event) =>
+                    setContext((current) => ({
+                      ...current,
+                      friendPlaylistInputs: event.target.value
+                        .split(/\r?\n|,/)
+                        .map((value) => value.trim())
+                        .filter(Boolean)
+                    }))
+                  }
+                  rows={4}
+                  placeholder="Paste public Spotify playlist links from friends, one per line."
+                  className="w-full rounded-[1.4rem] border border-dusk/12 bg-white/75 px-4 py-3 text-sm leading-6 text-ink/78 outline-none transition placeholder:text-ink/38 focus:border-dusk/28"
+                />
+                <p className="mt-2 text-xs leading-5 text-ink/52">
+                  Public playlist links or playlist IDs both work. We use them as extra vibe signals, not as exact copies.
+                </p>
+              </ControlGroup>
             </div>
           </aside>
 
@@ -316,7 +371,11 @@ export function Dashboard() {
                   <h2 className="mt-1 text-3xl text-dusk">Build a focused set of deep cuts</h2>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/68">
                     Current profile: {context.mood}, {context.timeOfDay}, {context.energyLevel} energy
-                    {selectedPlaylistNames.length ? `, seeded with ${selectedPlaylistNames.join(", ")}` : ""}.
+                    {context.languagePreference !== "any" ? `, ${context.languagePreference}-leaning` : ""}
+                    {selectedPlaylistNames.length ? `, seeded with ${selectedPlaylistNames.join(", ")}` : ""}
+                    {friendSignalsSummary
+                      ? `, plus ${friendSignalsSummary} friend vibe ${friendSignalsSummary === 1 ? "signal" : "signals"}`
+                      : ""}.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">

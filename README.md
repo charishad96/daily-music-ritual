@@ -5,7 +5,8 @@ A lightweight Spotify-powered web app that turns a listener's taste plus a small
 ## What it does
 
 - Connects to Spotify with OAuth.
-- Reads top tracks, top artists, recently played songs, and optional playlists.
+- Reads top tracks, top artists, recently played songs, optional playlists, and optional public friend-playlist links.
+- Accepts lightweight context controls including mood, time of day, energy, familiarity, and language bias.
 - Builds a simple taste profile from dominant genres, artist neighborhoods, and average audio features.
 - Generates 20 to 24 recommendations that bias toward novelty, lower-popularity cuts, and context fit.
 - Lets the user save any generated batch as a private Spotify playlist.
@@ -65,14 +66,15 @@ The recommendation pipeline is heuristic-based on purpose:
 1. Taste profile
    - Pull the user's short and medium-term top tracks.
    - Pull top artists and recently played tracks.
-   - Optionally blend in tracks from selected playlists.
+   - Optionally blend in tracks from selected playlists and public playlists shared by friends.
    - Average Spotify audio features across the combined seed tracks.
-   - Extract dominant genres from the user's top artists.
+   - Extract dominant genres from the user's top artists plus any friend-playlist artist overlap.
 
 2. Expansion
    - Ask Spotify for recommendations using seed artists, seed tracks, seed genres, and target audio features.
    - Expand outward through related artists and their top tracks.
    - Add a small genre search layer for broader discovery.
+   - Add heuristic language-biased search hints for English, Greek, Spanish, and Portuguese.
 
 3. Filtering
    - Remove tracks already present in top, recent, or selected playlist history.
@@ -89,4 +91,5 @@ The recommendation pipeline is heuristic-based on purpose:
 
 - The app uses a simple server-managed Spotify authorization flow and stores the Spotify session in secure HTTP-only cookies.
 - Audio-feature requests are used when available and fall back gracefully if Spotify does not return the feature batch.
+- Language selection is heuristic rather than strict because Spotify does not expose a reliable per-track language field across the catalog.
 - The machine used to author this code did not have `node` or `npm` available on PATH, so the app structure and code were completed but not executed locally here.

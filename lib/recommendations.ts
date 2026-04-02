@@ -8,6 +8,7 @@ import {
   getRelatedArtists,
   getTopArtists,
   getTopTracks,
+  resolveSpotifyPlaylistId,
   searchTracks
 } from "@/lib/spotify";
 import { average, clamp, normalize, releaseYear, seededValue, uniqueBy } from "@/lib/utils";
@@ -26,6 +27,7 @@ type ProfileSource = {
   topArtists: SpotifyArtist[];
   recentTracks: SpotifyTrack[];
   playlistTracks: SpotifyTrack[];
+  friendSignalTracks: SpotifyTrack[];
 };
 
 const DEFAULT_AUDIO_FEATURES: AudioFeatures = {
@@ -41,11 +43,60 @@ async function swallowSpotify403<T>(work: () => Promise<T>, fallback: T): Promis
   try {
     return await work();
   } catch (error) {
-    if (error instanceof SpotifyApiError && error.status === 403) {
+    if (error instanceof SpotifyApiError && [400, 403, 404].includes(error.status)) {
       return fallback;
     }
 
     throw error;
+  }
+}
+
+const LANGUAGE_QUERY_HINTS: Record<ContextInput["languagePreference"], string[]> = {
+  any: [],
+  english: ["english indie", "english alternative", "uk indie"],
+  greek: ["greek indie", "ellinika", "greek alternative"],
+  spanish: ["spanish indie", "espanol alternative", "latin indie"],
+  portuguese: ["mpb", "brazilian indie", "portuguese alternative"]
+};
+
+const LANGUAGE_LABELS: Record<ContextInput["languagePreference"], string> = {
+  any: "language-open",
+  english: "English-leaning",
+  greek: "Greek-leaning",
+  spanish: "Spanish-leaning",
+  portuguese: "Portuguese-leaning"
+};
+
+function extractPlaylistIds(inputs: string[]) {
+  return [
+    ...new Set(
+      inputs.map((input) => resolveSpotifyPlaylistId(input)).filter((playlistId): playlistId is string => Boolean(playlistId))
+    )
+  ];
+}
+
+function textContainsGreek(text: string) {
+  return /[\u0370-\u03ff]/.test(text);
+}
+
+function languageFit(track: SpotifyTrack, languagePreference: ContextInput["languagePreference"]) {
+  if (languagePreference === "any") {
+    return 0.5;
+  }
+
+  const haystack = `${track.name} ${track.artists.map((artist) => artist.name).join(" ")} ${track.album.name}`.toLowerCase();
+
+  switch (languagePreference) {
+    case "english":
+      return textContainsGreek(haystack) ? 0.1 : 0.75;
+    case "greek":
+      return textContainsGreek(haystack) || haystack.includes("greek") || haystack.includes("ellin") ? 1 : 0.08;
+    case "spanish":
+      return haystack.includes("spanish") || haystack.includes("espan") || haystack.includes("latin") ? 1 : 0.12;
+    case "portuguese":
+      return haystack.includes("brazil") || haystack.includes("brasil") || haystack.includes("portugu") || haystack.includes("mpb")
+        ? 1
+        : 0.12;
   }
 }
 
@@ -155,7 +206,10 @@ function buildTargetFeatures(profile: TasteProfile, context: ContextInput): Audi
   };
 }
 
-export async function collectProfileSource(playlistIds: string[]): Promise<ProfileSource> {
+export async function collectProfileSource(
+  playlistIds: string[],
+  friendPlaylistInputs: string[] = []
+): Promise<ProfileSource> {
   const [topTracksShort, topTracksMedium, topArtistsShort, topArtistsMedium, recentTracks] =
     await Promise.all([
       swallowSpotify403(() => getTopTracks("short_term", 25), []),
@@ -168,23 +222,35 @@ export async function collectProfileSource(playlistIds: string[]): Promise<Profi
   const playlistTrackGroups = await Promise.all(
     playlistIds.map((playlistId) => swallowSpotify403(() => getPlaylistTracks(playlistId), []))
   );
+  const friendPlaylistIds = extractPlaylistIds(friendPlaylistInputs).filter((playlistId) => !playlistIds.includes(playlistId));
+  const friendPlaylistGroups = await Promise.all(
+    friendPlaylistIds.map((playlistId) => swallowSpotify403(() => getPlaylistTracks(playlistId), []))
+  );
   const playlistTracks = playlistTrackGroups.flat();
+  const friendSignalTracks = friendPlaylistGroups.flat();
 
   return {
     topTracks: uniqueTracks([...topTracksShort, ...topTracksMedium]),
     topArtists: uniqueBy([...topArtistsShort, ...topArtistsMedium], (artist) => artist.id),
     recentTracks: uniqueTracks(recentTracks),
-    playlistTracks: uniqueTracks(playlistTracks)
+    playlistTracks: uniqueTracks(playlistTracks),
+    friendSignalTracks: uniqueTracks(friendSignalTracks)
   };
 }
 
 export async function buildTasteProfile(source: ProfileSource): Promise<TasteProfile> {
-  const seedTracks = uniqueTracks([...source.topTracks, ...source.recentTracks, ...source.playlistTracks]).slice(
-    0,
-    80
-  );
+  const blendedArtists = uniqueBy(
+    [...source.topArtists, ...source.friendSignalTracks.flatMap((track) => track.artists)],
+    (artist) => artist.id
+  ).slice(0, 20);
+  const seedTracks = uniqueTracks([
+    ...source.topTracks,
+    ...source.recentTracks,
+    ...source.playlistTracks,
+    ...source.friendSignalTracks.slice(0, 40)
+  ]).slice(0, 80);
   const audioFeaturesByTrackId = await getAudioFeatures(seedTracks.map((track) => track.id));
-  const dominantGenres = pickTopGenres(source.topArtists);
+  const dominantGenres = pickTopGenres(blendedArtists);
 
   const averageFeatures: AudioFeatures = {
     danceability: average(seedTracks.map((track) => audioFeaturesByTrackId[track.id]?.danceability ?? 0.56), 0.56),
@@ -202,11 +268,13 @@ export async function buildTasteProfile(source: ProfileSource): Promise<TastePro
   };
 
   const excludedTrackIds = new Set<string>(
-    [...source.topTracks, ...source.recentTracks, ...source.playlistTracks].map((track) => track.id)
+    [...source.topTracks, ...source.recentTracks, ...source.playlistTracks, ...source.friendSignalTracks].map(
+      (track) => track.id
+    )
   );
   const seenArtistIds = new Set<string>(
     [
-      ...source.topArtists.map((artist) => artist.id),
+      ...blendedArtists.map((artist) => artist.id),
       ...seedTracks.flatMap((track) => track.artists.map((artist) => artist.id))
     ]
   );
@@ -214,7 +282,7 @@ export async function buildTasteProfile(source: ProfileSource): Promise<TastePro
   return {
     averageFeatures,
     dominantGenres,
-    seedArtists: source.topArtists.slice(0, 10),
+    seedArtists: blendedArtists.slice(0, 10),
     seedTracks: seedTracks.slice(0, 10),
     excludedTrackIds,
     seenArtistIds
@@ -300,7 +368,8 @@ async function expandCandidates(
       ? "high energy"
       : context.energyLevel === "low"
         ? "soft chill"
-        : "midtempo"
+        : "midtempo",
+    ...LANGUAGE_QUERY_HINTS[context.languagePreference]
   ].filter(Boolean) as string[];
 
   const broadFallbackSearchGroups = await Promise.all(
@@ -387,9 +456,13 @@ function explainRecommendation(
 }
 
 export async function generateDailyRecommendations(context: ContextInput) {
-  const source = await collectProfileSource(context.playlistIds);
+  const source = await collectProfileSource(context.playlistIds, context.friendPlaylistInputs);
   const hasProfileData =
-    source.topTracks.length || source.topArtists.length || source.recentTracks.length || source.playlistTracks.length;
+    source.topTracks.length ||
+    source.topArtists.length ||
+    source.recentTracks.length ||
+    source.playlistTracks.length ||
+    source.friendSignalTracks.length;
 
   if (!hasProfileData) {
     throw new Error("Spotify allowed login, but did not allow enough listening data for recommendations.");
@@ -411,12 +484,14 @@ export async function generateDailyRecommendations(context: ContextInput) {
         clamp(1 - normalize(track.popularity, 20, 90), 0, 1) * 0.68 +
         clamp(1 - normalize(track.artists[0]?.popularity || 50, 25, 90), 0, 1) * 0.22 +
         decadeBonus(context, track.album.release_date);
+      const languageScore = languageFit(track, context.languagePreference);
       const contextFit =
         clamp(1 - Math.abs(target.energy - features.energy), 0, 1) * 0.35 +
         clamp(1 - Math.abs(target.valence - features.valence), 0, 1) * 0.2 +
         clamp(1 - Math.abs(target.danceability - features.danceability), 0, 1) * 0.15 +
         clamp(1 - Math.abs(target.tempo - features.tempo) / 70, 0, 1) * 0.15 +
-        clamp(1 - Math.abs(target.acousticness - features.acousticness), 0, 1) * 0.15;
+        clamp(1 - Math.abs(target.acousticness - features.acousticness), 0, 1) * 0.15 +
+        languageScore * 0.18;
 
       const safeWeight = 0.34 + safety * 0.24;
       const noveltyWeight = 0.2 + exploration * 0.28;
@@ -477,7 +552,8 @@ export async function generateDailyRecommendations(context: ContextInput) {
           ? "sunrise indie"
           : context.timeOfDay === "evening"
             ? "evening alternative"
-            : "afternoon indie"
+            : "afternoon indie",
+      ...LANGUAGE_QUERY_HINTS[context.languagePreference]
     ].filter(Boolean) as string[];
 
     const emergencySearchGroups = await Promise.all(
@@ -500,7 +576,11 @@ export async function generateDailyRecommendations(context: ContextInput) {
         contextFit: 0.48,
         reason: {
           headline: "Broader discovery fallback",
-          detail: `Spotify returned a sparse first-pass set, so this pick comes from a wider ${context.mood} discovery search.`
+          detail: `Spotify returned a sparse first-pass set, so this pick comes from a wider ${context.mood} discovery search${
+            context.languagePreference !== "any"
+              ? ` with a ${LANGUAGE_LABELS[context.languagePreference].toLowerCase()} bias`
+              : ""
+          }.`
         }
       }));
 

@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     }).format(new Date());
     const playlist = await createPlaylist(
       `Daily Ritual - ${body.context.mood} ${dateLabel}`,
-      `Context: ${body.context.timeOfDay}, ${body.context.energyLevel} energy, familiarity ${body.context.familiarity}.`
+      `Context: ${body.context.timeOfDay}, ${body.context.energyLevel} energy, familiarity ${body.context.familiarity}, language ${body.context.languagePreference}, friend vibes ${body.context.friendPlaylistInputs.length}.`
     );
 
     await addItemsToPlaylist(playlist.id, body.trackUris);
