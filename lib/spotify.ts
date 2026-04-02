@@ -115,10 +115,11 @@ export async function getArtistTopTracks(artistId: string, market = "from_token"
 }
 
 export async function searchTracks(query: string, limit = 15) {
+  const safeLimit = Math.min(Math.max(limit, 1), 50);
   const params = new URLSearchParams({
     q: query,
     type: "track",
-    limit: String(limit)
+    limit: String(safeLimit)
   });
 
   const response = await spotifyFetch<{ tracks: { items: SpotifyTrack[] } }>(
@@ -203,3 +204,4 @@ export async function addItemsToPlaylist(playlistId: string, uris: string[]) {
     body: JSON.stringify({ uris })
   });
 }
+
