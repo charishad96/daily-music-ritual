@@ -40,9 +40,9 @@ export async function GET() {
       playlists: playlists.map((playlist) => ({
         id: playlist.id,
         name: playlist.name,
-        description: playlist.description,
-        images: playlist.images,
-        tracksTotal: playlist.tracks.total
+        description: playlist.description || "",
+        images: playlist.images || [],
+        tracksTotal: playlist.tracks?.total || 0
       }))
     });
   } catch (error) {
