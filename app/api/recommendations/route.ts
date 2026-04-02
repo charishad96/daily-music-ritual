@@ -5,6 +5,9 @@ import { getCurrentUserPlaylists, getCurrentUserProfile } from "@/lib/spotify";
 import { getValidSpotifyAccessToken } from "@/lib/spotify-auth";
 import type { ContextInput } from "@/types";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 async function fallbackOnSpotifyReadError<T>(work: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await work();
@@ -79,4 +82,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
