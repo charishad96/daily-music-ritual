@@ -126,7 +126,7 @@ export async function getArtistTopTracks(artistId: string, market = "from_token"
 }
 
 export async function searchTracks(query: string, limit = 15) {
-  const safeLimit = clampLimit(limit, 1, 50);
+  const safeLimit = clampLimit(limit, 1, 10);
   const params = new URLSearchParams({
     q: query,
     type: "track",
