@@ -41,6 +41,7 @@ export function Dashboard() {
   const [isBootstrapping, startBootstrap] = useTransition();
   const [isLoading, startLoading] = useTransition();
   const [refreshCount, setRefreshCount] = useState(0);
+  const [lastRunContextKey, setLastRunContextKey] = useState<string | null>(null);
 
   useEffect(() => {
     startBootstrap(async () => {
@@ -63,6 +64,8 @@ export function Dashboard() {
   async function runRecommendations(nextRefreshCount = refreshCount) {
     setError(null);
     setPlaylistState({ saving: false });
+    const contextKey = JSON.stringify(context);
+    const contextChanged = lastRunContextKey !== contextKey;
 
     startLoading(async () => {
       const response = await fetch("/api/recommendations", {
@@ -72,8 +75,8 @@ export function Dashboard() {
         },
         body: JSON.stringify({
           ...context,
-          excludeTrackIds: tracks.map((track) => track.id),
-          refreshKey: String(nextRefreshCount)
+          excludeTrackIds: contextChanged ? [] : tracks.map((track) => track.id),
+          refreshKey: String(contextChanged ? nextRefreshCount + 1 : nextRefreshCount)
         })
       });
 
@@ -86,6 +89,10 @@ export function Dashboard() {
 
       setTracks(data.tracks);
       setProfileSummary(data.profileSummary);
+      setLastRunContextKey(contextKey);
+      if (contextChanged) {
+        setRefreshCount(nextRefreshCount + 1);
+      }
     });
   }
 
@@ -445,9 +452,6 @@ function TrackCard({ track, index }: { track: RankedTrack; index: number }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-2xl text-dusk">{track.name}</h3>
-            <span className="rounded-full bg-ember/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-ember">
-              {Math.round(track.novelty * 100)} novelty
-            </span>
           </div>
           <p className="mt-1 text-sm text-ink/68">{track.artists.map((artist) => artist.name).join(", ")}</p>
           <p className="mt-3 text-sm font-semibold text-dusk">{track.reason.headline}</p>
