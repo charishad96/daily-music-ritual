@@ -214,7 +214,7 @@ export async function createPlaylist(name: string, description: string) {
 }
 
 export async function addItemsToPlaylist(playlistId: string, uris: string[]) {
-  return spotifyFetch<{ snapshot_id: string }>(`/playlists/${playlistId}/tracks`, {
+  return spotifyFetch<{ snapshot_id: string }>(`/playlists/${playlistId}/items`, {
     method: "POST",
     body: JSON.stringify({ uris })
   });
