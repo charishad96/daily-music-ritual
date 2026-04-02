@@ -38,6 +38,16 @@ export function getSpotifyConfig() {
   };
 }
 
+export function getCookieOptions(maxAge: number) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge
+  };
+}
+
 export function createSpotifyAuthorizeUrl(state: string) {
   const { clientId, redirectUri } = getSpotifyConfig();
   const params = new URLSearchParams({
@@ -105,31 +115,13 @@ export async function persistSpotifySession(tokenResponse: {
   const cookieStore = await cookies();
   const expiresAt = Date.now() + tokenResponse.expires_in * 1000;
 
-  cookieStore.set(ACCESS_COOKIE, tokenResponse.access_token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: tokenResponse.expires_in
-  });
+  cookieStore.set(ACCESS_COOKIE, tokenResponse.access_token, getCookieOptions(tokenResponse.expires_in));
 
   if (tokenResponse.refresh_token) {
-    cookieStore.set(REFRESH_COOKIE, tokenResponse.refresh_token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30
-    });
+    cookieStore.set(REFRESH_COOKIE, tokenResponse.refresh_token, getCookieOptions(60 * 60 * 24 * 30));
   }
 
-  cookieStore.set(EXPIRY_COOKIE, String(expiresAt), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: tokenResponse.expires_in
-  });
+  cookieStore.set(EXPIRY_COOKIE, String(expiresAt), getCookieOptions(tokenResponse.expires_in));
 }
 
 export async function clearSpotifySession() {
@@ -142,13 +134,7 @@ export async function clearSpotifySession() {
 
 export async function setSpotifyAuthState(state: string) {
   const cookieStore = await cookies();
-  cookieStore.set(STATE_COOKIE, state, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 10
-  });
+  cookieStore.set(STATE_COOKIE, state, getCookieOptions(60 * 10));
 }
 
 export async function getSpotifyAuthState() {
@@ -181,3 +167,9 @@ export async function getValidSpotifyAccessToken(): Promise<string | null> {
 }
 
 export { SPOTIFY_API_URL };
+export const SPOTIFY_COOKIE_NAMES = {
+  access: ACCESS_COOKIE,
+  refresh: REFRESH_COOKIE,
+  expiry: EXPIRY_COOKIE,
+  state: STATE_COOKIE
+};
