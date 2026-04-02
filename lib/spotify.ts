@@ -199,3 +199,22 @@ export async function getAudioFeatures(trackIds: string[]) {
 
   return features;
 }
+
+export async function createPlaylist(name: string, description: string) {
+  return spotifyFetch<{ id: string; external_urls: { spotify: string } }>("/me/playlists", {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      public: false,
+      description
+    })
+  });
+}
+
+export async function addItemsToPlaylist(playlistId: string, uris: string[]) {
+  return spotifyFetch<{ snapshot_id: string }>(`/playlists/${playlistId}/tracks`, {
+    method: "POST",
+    body: JSON.stringify({ uris })
+  });
+}
+
