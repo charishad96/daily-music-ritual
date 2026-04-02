@@ -90,3 +90,7 @@ export function canonicalTrackKey(track: SpotifyTrack) {
   const title = normalizeComparableText(track.name);
   return `${leadArtist}::${title}`;
 }
+
+export function canonicalTitleKey(track: SpotifyTrack) {
+  return normalizeComparableText(track.name);
+}
