@@ -277,10 +277,29 @@ async function expandCandidates(
       .map((genre) => swallowSpotify403(() => searchTracks(`genre:"${genre}"${decadeQuery}`, 18), []))
   );
 
+  const broadFallbackQueries = [
+    profile.dominantGenres[0],
+    profile.dominantGenres[1],
+    context.mood === "focused"
+      ? "indie alternative"
+      : context.mood === "calm"
+        ? "dream pop"
+        : context.mood === "energetic"
+          ? "indie dance"
+          : context.mood === "melancholic"
+            ? "art pop"
+            : "nu disco"
+  ].filter(Boolean) as string[];
+
+  const broadFallbackSearchGroups = await Promise.all(
+    broadFallbackQueries.map((query) => swallowSpotify403(() => searchTracks(`${query}${decadeQuery}`, 25), []))
+  );
+
   const candidates = uniqueTracks([
     ...recommendationTracks,
     ...relatedArtistTrackGroups.flat(),
-    ...genreSearchGroups.flat()
+    ...genreSearchGroups.flat(),
+    ...broadFallbackSearchGroups.flat()
   ]);
   const filteredCandidates = candidates.filter(
     (track) =>
@@ -425,6 +444,41 @@ export async function generateDailyRecommendations(context: ContextInput) {
     if (finalTracks.length === 24) {
       break;
     }
+  }
+
+  if (!finalTracks.length) {
+    const emergencyQueries = [
+      profile.dominantGenres[0],
+      profile.dominantGenres[1],
+      "indie",
+      "alternative"
+    ].filter(Boolean) as string[];
+
+    const emergencySearchGroups = await Promise.all(
+      emergencyQueries.map((query) => swallowSpotify403(() => searchTracks(query, 30), []))
+    );
+    const emergencyTracks = uniqueTracks(emergencySearchGroups.flat())
+      .filter((track) => !profile.excludedTrackIds.has(track.id))
+      .slice(0, 24)
+      .map((track, index) => ({
+        ...track,
+        score: 0.4 - index * 0.001,
+        similarity: 0.52,
+        novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
+        contextFit: 0.48,
+        reason: {
+          headline: "Broader discovery fallback",
+          detail: "Spotify returned a sparse first-pass set, so this pick comes from a wider taste-adjacent search."
+        }
+      }));
+
+    return {
+      profileSummary: {
+        dominantGenres: profile.dominantGenres,
+        averageFeatures: profile.averageFeatures
+      },
+      tracks: emergencyTracks
+    };
   }
 
   return {
