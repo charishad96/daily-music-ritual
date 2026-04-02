@@ -7,6 +7,10 @@ type SpotifyFetchOptions = {
   body?: string;
 };
 
+function clampLimit(limit: number, min: number, max: number) {
+  return Math.min(Math.max(limit, min), max);
+}
+
 export class SpotifyApiError extends Error {
   status: number;
   detail: string;
@@ -53,6 +57,7 @@ export async function getCurrentUserProfile() {
 }
 
 export async function getCurrentUserPlaylists() {
+  const safeLimit = clampLimit(20, 1, 50);
   const response = await spotifyFetch<{
     items: {
       id: string;
@@ -61,38 +66,42 @@ export async function getCurrentUserPlaylists() {
       images: { url: string; height: number | null; width: number | null }[];
       tracks: { total: number };
     }[];
-  }>("/me/playlists?limit=20");
+  }>(`/me/playlists?limit=${safeLimit}`);
 
   return response.items;
 }
 
 export async function getTopTracks(timeRange: "short_term" | "medium_term", limit = 25) {
+  const safeLimit = clampLimit(limit, 1, 50);
   const response = await spotifyFetch<{ items: SpotifyTrack[] }>(
-    `/me/top/tracks?time_range=${timeRange}&limit=${limit}`
+    `/me/top/tracks?time_range=${timeRange}&limit=${safeLimit}`
   );
 
   return response.items;
 }
 
 export async function getTopArtists(timeRange: "short_term" | "medium_term", limit = 20) {
+  const safeLimit = clampLimit(limit, 1, 50);
   const response = await spotifyFetch<{ items: SpotifyArtist[] }>(
-    `/me/top/artists?time_range=${timeRange}&limit=${limit}`
+    `/me/top/artists?time_range=${timeRange}&limit=${safeLimit}`
   );
 
   return response.items;
 }
 
 export async function getRecentlyPlayed(limit = 30) {
+  const safeLimit = clampLimit(limit, 1, 50);
   const response = await spotifyFetch<{ items: { track: SpotifyTrack }[] }>(
-    `/me/player/recently-played?limit=${limit}`
+    `/me/player/recently-played?limit=${safeLimit}`
   );
 
   return response.items.map((item) => item.track);
 }
 
 export async function getPlaylistTracks(playlistId: string, limit = 50) {
+  const safeLimit = clampLimit(limit, 1, 100);
   const response = await spotifyFetch<{ items: { track: SpotifyTrack | null }[] }>(
-    `/playlists/${playlistId}/tracks?limit=${limit}`
+    `/playlists/${playlistId}/tracks?limit=${safeLimit}`
   );
 
   return response.items.map((item) => item.track).filter(Boolean) as SpotifyTrack[];
@@ -115,7 +124,7 @@ export async function getArtistTopTracks(artistId: string, market = "from_token"
 }
 
 export async function searchTracks(query: string, limit = 15) {
-  const safeLimit = Math.min(Math.max(limit, 1), 50);
+  const safeLimit = clampLimit(limit, 1, 50);
   const params = new URLSearchParams({
     q: query,
     type: "track",
@@ -134,7 +143,11 @@ export async function getRecommendations(params: Record<string, string | number 
 
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") {
-      filteredParams.set(key, String(value));
+      if (key === "limit" && typeof value === "number") {
+        filteredParams.set(key, String(clampLimit(value, 1, 100)));
+      } else {
+        filteredParams.set(key, String(value));
+      }
     }
   });
 
@@ -186,22 +199,3 @@ export async function getAudioFeatures(trackIds: string[]) {
 
   return features;
 }
-
-export async function createPlaylist(name: string, description: string) {
-  return spotifyFetch<{ id: string; external_urls: { spotify: string } }>("/me/playlists", {
-    method: "POST",
-    body: JSON.stringify({
-      name,
-      public: false,
-      description
-    })
-  });
-}
-
-export async function addItemsToPlaylist(playlistId: string, uris: string[]) {
-  return spotifyFetch<{ snapshot_id: string }>(`/playlists/${playlistId}/tracks`, {
-    method: "POST",
-    body: JSON.stringify({ uris })
-  });
-}
-
