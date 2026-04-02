@@ -283,12 +283,24 @@ async function expandCandidates(
     context.mood === "focused"
       ? "indie alternative"
       : context.mood === "calm"
-        ? "dream pop"
+      ? "dream pop"
         : context.mood === "energetic"
           ? "indie dance"
           : context.mood === "melancholic"
             ? "art pop"
-            : "nu disco"
+            : "nu disco",
+    context.timeOfDay === "night"
+      ? "after hours"
+      : context.timeOfDay === "morning"
+        ? "sunrise indie"
+        : context.timeOfDay === "evening"
+          ? "twilight pop"
+          : "daytime grooves",
+    context.energyLevel === "high"
+      ? "high energy"
+      : context.energyLevel === "low"
+        ? "soft chill"
+        : "midtempo"
   ].filter(Boolean) as string[];
 
   const broadFallbackSearchGroups = await Promise.all(
@@ -450,8 +462,22 @@ export async function generateDailyRecommendations(context: ContextInput) {
     const emergencyQueries = [
       profile.dominantGenres[0],
       profile.dominantGenres[1],
-      "indie",
-      "alternative"
+      context.mood === "focused"
+        ? "indie alternative"
+        : context.mood === "calm"
+          ? "dream pop"
+          : context.mood === "energetic"
+            ? "dance rock"
+            : context.mood === "melancholic"
+              ? "art pop"
+              : "nu disco",
+      context.timeOfDay === "night"
+        ? "after hours"
+        : context.timeOfDay === "morning"
+          ? "sunrise indie"
+          : context.timeOfDay === "evening"
+            ? "evening alternative"
+            : "afternoon indie"
     ].filter(Boolean) as string[];
 
     const emergencySearchGroups = await Promise.all(
@@ -459,6 +485,12 @@ export async function generateDailyRecommendations(context: ContextInput) {
     );
     const emergencyTracks = uniqueTracks(emergencySearchGroups.flat())
       .filter((track) => !profile.excludedTrackIds.has(track.id))
+      .sort(
+        (left, right) =>
+          seededValue(`${dailySalt}:${right.id}`) +
+          (1 - normalize(right.popularity, 20, 90)) * 0.2 -
+          (seededValue(`${dailySalt}:${left.id}`) + (1 - normalize(left.popularity, 20, 90)) * 0.2)
+      )
       .slice(0, 24)
       .map((track, index) => ({
         ...track,
@@ -468,7 +500,7 @@ export async function generateDailyRecommendations(context: ContextInput) {
         contextFit: 0.48,
         reason: {
           headline: "Broader discovery fallback",
-          detail: "Spotify returned a sparse first-pass set, so this pick comes from a wider taste-adjacent search."
+          detail: `Spotify returned a sparse first-pass set, so this pick comes from a wider ${context.mood} discovery search.`
         }
       }));
 
