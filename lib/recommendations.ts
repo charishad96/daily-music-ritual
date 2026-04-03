@@ -43,7 +43,7 @@ async function swallowSpotify403<T>(work: () => Promise<T>, fallback: T): Promis
   try {
     return await work();
   } catch (error) {
-    if (error instanceof SpotifyApiError && [400, 403, 404].includes(error.status)) {
+    if (error instanceof SpotifyApiError && [400, 403, 404, 429].includes(error.status)) {
       return fallback;
     }
 
@@ -212,7 +212,7 @@ function languageLockedQueries(context: ContextInput) {
 
   return LANGUAGE_QUERY_HINTS[context.languagePreference]
     .flatMap((hint) => [hint, `${hint} ${moodHint}`])
-    .slice(0, 8);
+    .slice(0, 4);
 }
 
 async function searchLanguageLockedTracks(context: ContextInput) {
@@ -729,7 +729,9 @@ async function expandCandidates(
         ? "soft chill"
         : "midtempo",
     ...LANGUAGE_QUERY_HINTS[context.languagePreference]
-  ].filter(Boolean) as string[];
+  ]
+    .filter(Boolean)
+    .slice(0, isLanguageLocked(context.languagePreference) ? 4 : 6) as string[];
 
   const broadFallbackSearchGroups = await Promise.all(
     broadFallbackQueries.map((query) => swallowSpotify403(() => searchTracks(`${query}${decadeQuery}`, 25), []))
@@ -937,7 +939,9 @@ export async function generateDailyRecommendations(context: ContextInput) {
               : "nu disco",
       ...timeOfDaySearchHints(context.timeOfDay),
       ...LANGUAGE_QUERY_HINTS[context.languagePreference]
-    ].filter(Boolean) as string[];
+    ]
+      .filter(Boolean)
+      .slice(0, isLanguageLocked(context.languagePreference) ? 4 : 5) as string[];
 
     const emergencySearchGroups = await Promise.all(
       emergencyQueries.map((query) => swallowSpotify403(() => searchTracks(query, 30), []))
