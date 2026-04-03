@@ -11,7 +11,7 @@ import {
   resolveSpotifyPlaylistId,
   searchTracks
 } from "@/lib/spotify";
-import { average, canonicalTitleKey, canonicalTrackKey, clamp, normalize, releaseYear, seededValue, uniqueBy } from "@/lib/utils";
+import { average, canonicalTitleKey, canonicalTrackKey, clamp, normalize, normalizeComparableText, releaseYear, seededValue, uniqueBy } from "@/lib/utils";
 import type {
   AudioFeatures,
   ContextInput,
@@ -54,7 +54,7 @@ async function swallowSpotify403<T>(work: () => Promise<T>, fallback: T): Promis
 const LANGUAGE_QUERY_HINTS: Record<ContextInput["languagePreference"], string[]> = {
   any: [],
   english: ["english indie", "english alternative", "uk indie", "american indie", "indie singer songwriter"],
-  greek: ["ellinika", "greek indie", "greek alternative", "greek pop", "entechno", "greek rock", "athens indie"],
+  greek: ["greek indie", "greek alternative", "greek pop", "entechno", "greek rock", "athens indie"],
   spanish: [
     "musica en espanol",
     "indie espanol",
@@ -96,11 +96,22 @@ function textContainsGreek(text: string) {
 }
 
 function textContainsLatinDiacritics(text: string) {
-  return /(á|é|í|ó|ú|ñ|ü|ã|õ|â|ê|ô|à|ç)/i.test(text);
+  return /[\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1\u00fc\u00e3\u00f5\u00e2\u00ea\u00f4\u00e0\u00e7]/i.test(text);
 }
 
 function textIncludesAny(text: string, tokens: string[]) {
   return tokens.some((token) => text.includes(token));
+}
+
+function normalizedLanguageText(track: SpotifyTrack) {
+  const title = normalizeComparableText(track.name);
+  const album = normalizeComparableText(track.album.name);
+  return `${title} ${album}`.trim();
+}
+
+function tokenMatchScore(text: string, tokens: string[]) {
+  const padded = ` ${text} `;
+  return tokens.reduce((score, token) => score + (padded.includes(` ${token} `) ? 1 : 0), 0);
 }
 
 function languageFit(track: SpotifyTrack, languagePreference: ContextInput["languagePreference"]) {
@@ -108,22 +119,35 @@ function languageFit(track: SpotifyTrack, languagePreference: ContextInput["lang
     return 0.5;
   }
 
-  const haystack = `${track.name} ${track.artists.map((artist) => artist.name).join(" ")} ${track.album.name}`.toLowerCase();
+  const textOnly = normalizedLanguageText(track);
+  const spanishTokens = ["el", "la", "de", "del", "que", "como", "sin", "para", "mi", "tu", "yo", "amor", "vida"];
+  const portugueseTokens = ["voce", "nao", "pra", "saudade", "meu", "minha", "com", "uma", "eu", "amor"];
 
   switch (languagePreference) {
     case "english":
-      return textContainsGreek(haystack) ? 0.05 : textContainsLatinDiacritics(haystack) ? 0.42 : 0.78;
+      return textContainsGreek(track.name) || textContainsGreek(track.album.name)
+        ? 0.05
+        : textContainsLatinDiacritics(textOnly)
+          ? 0.28
+          : 0.82;
     case "greek":
-      return textContainsGreek(haystack) || textIncludesAny(haystack, ["greek", "ellin", "entechno"]) ? 1 : 0.04;
+      return textContainsGreek(track.name) || textContainsGreek(track.album.name)
+        ? 1
+        : textIncludesAny(textOnly, ["entechno", "athina", "athens"])
+          ? 0.34
+          : 0.02;
     case "spanish":
-      return textIncludesAny(haystack, ["espan", "spanish", "latin", "argentin", "mexic", "reggaeton", "cancion", "latino"]) ||
-        textContainsLatinDiacritics(haystack)
-        ? 0.92
-        : 0.06;
+      return tokenMatchScore(textOnly, spanishTokens) >= 2 || /[\u00f1\u00e1\u00e9\u00ed\u00f3\u00fa]/i.test(track.name)
+        ? 0.96
+        : textIncludesAny(textOnly, ["latino", "cancion", "espanol"])
+          ? 0.38
+          : 0.02;
     case "portuguese":
-      return textIncludesAny(haystack, ["brazil", "brasil", "portugu", "mpb", "nova mpb", "brasileiro"]) || /[\u00e3\u00f5\u00e7]/i.test(haystack)
-        ? 0.94
-        : 0.06;
+      return tokenMatchScore(textOnly, portugueseTokens) >= 2 || /[\u00e3\u00f5\u00e7]/i.test(track.name)
+        ? 0.96
+        : textIncludesAny(textOnly, ["brasil", "brasileiro", "mpb", "portugues"])
+          ? 0.38
+          : 0.02;
   }
 }
 
@@ -170,17 +194,39 @@ function isLanguageLocked(languagePreference: ContextInput["languagePreference"]
   return languagePreference !== "any";
 }
 
-async function searchLanguageLockedTracks(queries: string[], languagePreference: ContextInput["languagePreference"]) {
-  if (!isLanguageLocked(languagePreference)) {
+function languageLockedQueries(context: ContextInput) {
+  if (!isLanguageLocked(context.languagePreference)) {
+    return [] as string[];
+  }
+
+  const moodHint =
+    context.mood === "focused"
+      ? "focused"
+      : context.mood === "calm"
+        ? "soft"
+        : context.mood === "energetic"
+          ? "upbeat"
+          : context.mood === "melancholic"
+            ? "melancholic"
+            : "social";
+
+  return LANGUAGE_QUERY_HINTS[context.languagePreference]
+    .flatMap((hint) => [hint, `${hint} ${moodHint}`])
+    .slice(0, 8);
+}
+
+async function searchLanguageLockedTracks(context: ContextInput) {
+  if (!isLanguageLocked(context.languagePreference)) {
     return [] as SpotifyTrack[];
   }
 
+  const queries = languageLockedQueries(context);
   const searchGroups = await Promise.all(
     queries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
   );
 
   const languageFirst = uniqueTracks(searchGroups.flat()).filter(
-    (track) => languageFit(track, languagePreference) >= languageFloor(languagePreference) - 0.08
+    (track) => languageFit(track, context.languagePreference) >= languageFloor(context.languagePreference)
   );
 
   return languageFirst;
@@ -291,7 +337,7 @@ async function buildSafeRecallTracks(
 async function buildContextOnlyRecommendations(context: ContextInput) {
   const dailySalt = `${new Date().toISOString().slice(0, 10)}:${context.refreshKey || "0"}`;
   const queries = contextOnlySearchQueries(context);
-  const lockedTracks = await searchLanguageLockedTracks(queries, context.languagePreference);
+  const lockedTracks = await searchLanguageLockedTracks(context);
   const searchGroups = lockedTracks.length
     ? [lockedTracks]
     : await Promise.all(queries.map((query) => swallowSpotify403(() => searchTracks(query, 10), [])));
@@ -688,7 +734,7 @@ async function expandCandidates(
   const broadFallbackSearchGroups = await Promise.all(
     broadFallbackQueries.map((query) => swallowSpotify403(() => searchTracks(`${query}${decadeQuery}`, 25), []))
   );
-  const languageLockedTracks = await searchLanguageLockedTracks(broadFallbackQueries, context.languagePreference);
+  const languageLockedTracks = await searchLanguageLockedTracks(context);
 
   const candidates = enforceLanguagePreference(
     uniqueTracks([
@@ -938,5 +984,6 @@ export async function generateDailyRecommendations(context: ContextInput) {
     tracks: finalTracks
   };
 }
+
 
 
