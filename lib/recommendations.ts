@@ -83,6 +83,8 @@ const LANGUAGE_LABELS: Record<ContextInput["languagePreference"], string> = {
   portuguese: "Portuguese-leaning"
 };
 
+const MIN_LANGUAGE_BATCH = 5;
+
 function extractPlaylistIds(inputs: string[]) {
   return [
     ...new Set(
@@ -187,7 +189,7 @@ function enforceLanguagePreference(tracks: SpotifyTrack[], languagePreference: C
     return strictMatches;
   }
 
-  return softMatches.length ? softMatches : tracks;
+  return softMatches;
 }
 
 function isLanguageLocked(languagePreference: ContextInput["languagePreference"]) {
@@ -212,7 +214,22 @@ function languageLockedQueries(context: ContextInput) {
 
   return LANGUAGE_QUERY_HINTS[context.languagePreference]
     .flatMap((hint) => [hint, `${hint} ${moodHint}`])
-    .slice(0, 4);
+    .slice(0, 3);
+}
+
+function languageRescueQueries(context: ContextInput) {
+  switch (context.languagePreference) {
+    case "any":
+      return [] as string[];
+    case "english":
+      return ["english indie", "uk alternative", "american indie"];
+    case "greek":
+      return ["greek indie", "entechno", "greek singer songwriter"];
+    case "spanish":
+      return ["musica en espanol", "spanish indie", "latin alternative"];
+    case "portuguese":
+      return ["musica brasileira", "mpb", "brazilian indie"];
+  }
 }
 
 async function searchLanguageLockedTracks(context: ContextInput) {
@@ -230,6 +247,28 @@ async function searchLanguageLockedTracks(context: ContextInput) {
   );
 
   return languageFirst;
+}
+
+async function searchLanguageRescueTracks(
+  context: ContextInput,
+  excludeTrackIds: string[] = []
+) {
+  if (!isLanguageLocked(context.languagePreference)) {
+    return [] as SpotifyTrack[];
+  }
+
+  const queries = languageRescueQueries(context);
+  const searchGroups = await Promise.all(
+    queries.map((query) => swallowSpotify403(() => searchTracks(query, 8), []))
+  );
+
+  return uniqueTracks(searchGroups.flat())
+    .filter(
+      (track) =>
+        !excludeTrackIds.includes(track.id) &&
+        languageFit(track, context.languagePreference) >= languageFloor(context.languagePreference)
+    )
+    .slice(0, 12);
 }
 
 function timeOfDaySearchHints(timeOfDay: ContextInput["timeOfDay"]) {
@@ -338,9 +377,18 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
   const dailySalt = `${new Date().toISOString().slice(0, 10)}:${context.refreshKey || "0"}`;
   const queries = contextOnlySearchQueries(context);
   const lockedTracks = await searchLanguageLockedTracks(context);
-  const searchGroups = lockedTracks.length
-    ? [lockedTracks]
-    : await Promise.all(queries.map((query) => swallowSpotify403(() => searchTracks(query, 10), [])));
+  const rescuedLockedTracks =
+    isLanguageLocked(context.languagePreference) && lockedTracks.length < MIN_LANGUAGE_BATCH
+      ? await searchLanguageRescueTracks(
+          context,
+          lockedTracks.map((track) => track.id)
+        )
+      : [];
+  const languagePool = uniqueTracks([...lockedTracks, ...rescuedLockedTracks]);
+  const searchGroups =
+    isLanguageLocked(context.languagePreference) && languagePool.length
+      ? [languagePool]
+      : await Promise.all(queries.map((query) => swallowSpotify403(() => searchTracks(query, 10), [])));
   const candidates = enforceLanguagePreference(uniqueTracks(searchGroups.flat()), context.languagePreference).filter(
     (track) => !(context.excludeTrackIds || []).includes(track.id)
   );
@@ -407,7 +455,50 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
     }
   }
 
+  if (isLanguageLocked(context.languagePreference) && finalTracks.length > 0) {
+    return {
+      profileSummary: {
+        dominantGenres: queries.slice(0, 5),
+        averageFeatures: {
+          energy: target.energy,
+          valence: target.valence
+        }
+      },
+      tracks: finalTracks.slice(0, Math.max(MIN_LANGUAGE_BATCH, finalTracks.length))
+    };
+  }
+
   if (!finalTracks.length) {
+    const languageRescue =
+      isLanguageLocked(context.languagePreference)
+        ? await searchLanguageRescueTracks(context, context.excludeTrackIds || [])
+        : [];
+
+    if (languageRescue.length) {
+      return {
+        profileSummary: {
+          dominantGenres: queries.slice(0, 5),
+          averageFeatures: {
+            energy: target.energy,
+            valence: target.valence
+          }
+        },
+        tracks: languageRescue.slice(0, 12).map((track, index) => ({
+          ...track,
+          score: 0.38 - index * 0.001,
+          similarity: 0.46,
+          novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
+          contextFit: 0.52,
+          reason: {
+            headline: `${LANGUAGE_LABELS[context.languagePreference]} rescue`,
+            detail: `Your selected language was kept strict, so this smaller batch pulls only from stronger ${LANGUAGE_LABELS[
+              context.languagePreference
+            ].toLowerCase()} matches.`
+          }
+        }))
+      };
+    }
+
     const widenedQueries = [
       context.mood === "calm"
         ? "ambient"
@@ -423,7 +514,7 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
     const widenedSearchGroups = await Promise.all(
       widenedQueries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
     );
-    const widenedTracks = uniqueTracks(widenedSearchGroups.flat()).slice(0, 24);
+    const widenedTracks = enforceLanguagePreference(uniqueTracks(widenedSearchGroups.flat()), context.languagePreference).slice(0, 24);
 
     return {
       profileSummary: {
@@ -737,15 +828,22 @@ async function expandCandidates(
     broadFallbackQueries.map((query) => swallowSpotify403(() => searchTracks(`${query}${decadeQuery}`, 25), []))
   );
   const languageLockedTracks = await searchLanguageLockedTracks(context);
+  const rescuedLanguageLockedTracks =
+    isLanguageLocked(context.languagePreference) && languageLockedTracks.length < MIN_LANGUAGE_BATCH
+      ? await searchLanguageRescueTracks(
+          context,
+          languageLockedTracks.map((track) => track.id)
+        )
+      : [];
+  const mergedLanguageLockedTracks = uniqueTracks([...languageLockedTracks, ...rescuedLanguageLockedTracks]);
 
   const candidates = enforceLanguagePreference(
     uniqueTracks([
-      ...(languageLockedTracks.length ? [] : recommendationTracks),
-      ...(languageLockedTracks.length ? [] : relatedArtistTrackGroups.flat()),
-      ...genreSearchGroups.flat(),
-      ...broadFallbackSearchGroups.flat()
-      ,
-      ...languageLockedTracks
+      ...(mergedLanguageLockedTracks.length ? [] : recommendationTracks),
+      ...(mergedLanguageLockedTracks.length ? [] : relatedArtistTrackGroups.flat()),
+      ...(isLanguageLocked(context.languagePreference) ? [] : genreSearchGroups.flat()),
+      ...(isLanguageLocked(context.languagePreference) ? [] : broadFallbackSearchGroups.flat()),
+      ...mergedLanguageLockedTracks
     ]),
     context.languagePreference
   );
@@ -925,6 +1023,38 @@ export async function generateDailyRecommendations(context: ContextInput) {
   }
 
   if (!finalTracks.length) {
+    const languageRescue =
+      isLanguageLocked(context.languagePreference)
+        ? await searchLanguageRescueTracks(
+            context,
+            [...profile.excludedTrackIds]
+          )
+        : [];
+
+    if (languageRescue.length) {
+      const rescueTracks = languageRescue.slice(0, 12).map((track, index) => ({
+        ...track,
+        score: 0.4 - index * 0.001,
+        similarity: 0.5,
+        novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
+        contextFit: 0.54,
+        reason: {
+          headline: `${LANGUAGE_LABELS[context.languagePreference]} rescue`,
+          detail: `Your selected language was kept strict, so this smaller batch prioritizes stronger ${LANGUAGE_LABELS[
+            context.languagePreference
+          ].toLowerCase()} matches over volume.`
+        }
+      }));
+
+      return {
+        profileSummary: {
+          dominantGenres: profile.dominantGenres,
+          averageFeatures: profile.averageFeatures
+        },
+        tracks: rescueTracks
+      };
+    }
+
     const emergencyQueries = [
       profile.dominantGenres[0],
       profile.dominantGenres[1],
