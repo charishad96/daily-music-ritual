@@ -20,6 +20,9 @@ async function fallbackOnSpotifyReadError<T>(work: () => Promise<T>, fallback: T
   }
 }
 
+const SPOTIFY_RESTRICTED_MESSAGE =
+  "Spotify login worked, but this account does not have enough Web API access for this app yet. If the app is still in Spotify development mode, the app owner needs to add this Spotify user in Spotify Developer Dashboard > Users and Access.";
+
 export async function GET() {
   try {
     const accessToken = await getValidSpotifyAccessToken();
@@ -31,11 +34,30 @@ export async function GET() {
       });
     }
 
-    const profile = await fallbackOnSpotifyReadError(() => getCurrentUserProfile(), null);
-    const playlists = await fallbackOnSpotifyReadError(() => getCurrentUserPlaylists(), []);
+    let restricted = false;
+    let profile = null;
+
+    try {
+      profile = await getCurrentUserProfile();
+    } catch (error) {
+      if (error instanceof SpotifyApiError && error.status === 403) {
+        restricted = true;
+      } else if (error instanceof SpotifyApiError && error.status === 401) {
+        return NextResponse.json({
+          authenticated: false,
+          debug: "spotify_profile_unauthorized"
+        });
+      } else {
+        throw error;
+      }
+    }
+
+    const playlists = restricted ? [] : await fallbackOnSpotifyReadError(() => getCurrentUserPlaylists(), []);
 
     return NextResponse.json({
       authenticated: true,
+      restricted,
+      restrictionReason: restricted ? SPOTIFY_RESTRICTED_MESSAGE : undefined,
       profile,
       playlists: playlists.map((playlist) => ({
         id: playlist.id,
@@ -68,6 +90,23 @@ export async function POST(request: Request) {
   }
 
   try {
+    try {
+      await getCurrentUserProfile();
+    } catch (error) {
+      if (error instanceof SpotifyApiError && error.status === 403) {
+        return NextResponse.json(
+          {
+            error: SPOTIFY_RESTRICTED_MESSAGE
+          },
+          {
+            status: 403
+          }
+        );
+      }
+
+      throw error;
+    }
+
     const context = (await request.json()) as ContextInput;
     const data = await generateDailyRecommendations(context);
     return NextResponse.json(data);
