@@ -92,6 +92,32 @@ const LANGUAGE_LEXICAL_SEEDS: Record<Exclude<ContextInput["languagePreference"],
   portuguese: ["amor", "coracao", "vida", "noite", "saudade"]
 };
 
+const SPANISH_STRONG_TOKENS = [
+  "amor",
+  "vida",
+  "corazon",
+  "noche",
+  "quiero",
+  "para",
+  "beso",
+  "corazon",
+  "sueno",
+  "cancion"
+];
+
+const PORTUGUESE_STRONG_TOKENS = [
+  "amor",
+  "vida",
+  "coracao",
+  "noite",
+  "saudade",
+  "voce",
+  "pra",
+  "meu",
+  "minha",
+  "cancao"
+];
+
 function extractPlaylistIds(inputs: string[]) {
   return [
     ...new Set(
@@ -121,6 +147,44 @@ function normalizedLanguageText(track: SpotifyTrack) {
 function tokenMatchScore(text: string, tokens: string[]) {
   const padded = ` ${text} `;
   return tokens.reduce((score, token) => score + (padded.includes(` ${token} `) ? 1 : 0), 0);
+}
+
+function strongLanguageMatch(track: SpotifyTrack, languagePreference: ContextInput["languagePreference"]) {
+  const textOnly = normalizedLanguageText(track);
+
+  switch (languagePreference) {
+    case "any":
+      return true;
+    case "english":
+      return !textContainsGreek(track.name) && !textContainsGreek(track.album.name) && !textContainsLatinDiacritics(textOnly);
+    case "greek":
+      return textContainsGreek(track.name) || textContainsGreek(track.album.name);
+    case "spanish":
+      return /[\u00f1\u00e1\u00e9\u00ed\u00f3\u00fa]/i.test(track.name) || tokenMatchScore(textOnly, SPANISH_STRONG_TOKENS) >= 1;
+    case "portuguese":
+      return /[\u00e3\u00f5\u00e7]/i.test(track.name) || tokenMatchScore(textOnly, PORTUGUESE_STRONG_TOKENS) >= 1;
+  }
+}
+
+function softLanguageMatch(track: SpotifyTrack, languagePreference: ContextInput["languagePreference"]) {
+  if (strongLanguageMatch(track, languagePreference)) {
+    return true;
+  }
+
+  const textOnly = normalizedLanguageText(track);
+
+  switch (languagePreference) {
+    case "any":
+      return true;
+    case "english":
+      return languageFit(track, languagePreference) >= 0.55;
+    case "greek":
+      return textIncludesAny(textOnly, ["entechno", "athina", "athens"]);
+    case "spanish":
+      return textIncludesAny(textOnly, ["latino", "espanol", "cancion", "mexico", "argentina"]);
+    case "portuguese":
+      return textIncludesAny(textOnly, ["brasil", "brasileiro", "mpb", "portugues"]);
+  }
 }
 
 function languageFit(track: SpotifyTrack, languagePreference: ContextInput["languagePreference"]) {
@@ -188,13 +252,13 @@ function enforceLanguagePreference(tracks: SpotifyTrack[], languagePreference: C
     return tracks;
   }
 
-  const strictMatches = tracks.filter((track) => languageFit(track, languagePreference) >= languageFloor(languagePreference));
+  const strictMatches = tracks.filter((track) => strongLanguageMatch(track, languagePreference));
 
   if (strictMatches.length >= 12) {
     return strictMatches;
   }
 
-  const softMatches = tracks.filter((track) => languageFit(track, languagePreference) >= languageFloor(languagePreference) - 0.14);
+  const softMatches = tracks.filter((track) => softLanguageMatch(track, languagePreference));
 
   if (softMatches.length >= 8) {
     return softMatches;
@@ -290,14 +354,14 @@ async function searchLanguageRescueTracks(
   );
 
   const unique = uniqueTracks(searchGroups.flat()).filter((track) => !excludeTrackIds.includes(track.id));
-  const strict = unique.filter((track) => languageFit(track, context.languagePreference) >= languageFloor(context.languagePreference));
+  const strict = unique.filter((track) => strongLanguageMatch(track, context.languagePreference));
 
   if (strict.length >= MIN_LANGUAGE_BATCH) {
     return strict.slice(0, 12);
   }
 
   const soft = unique
-    .filter((track) => languageFit(track, context.languagePreference) >= languageSoftFloor(context.languagePreference))
+    .filter((track) => softLanguageMatch(track, context.languagePreference))
     .slice(0, 12);
 
   if (strict.length) {
@@ -427,7 +491,7 @@ async function buildKnownPoolRescueTracks(
   }
 
   const filteredPool = isLanguageLocked(context.languagePreference)
-    ? familiarPool.filter((track) => languageFit(track, context.languagePreference) >= languageSoftFloor(context.languagePreference))
+    ? familiarPool.filter((track) => softLanguageMatch(track, context.languagePreference))
     : familiarPool;
 
   if (!filteredPool.length) {
