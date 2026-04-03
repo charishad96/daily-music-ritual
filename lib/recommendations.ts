@@ -168,6 +168,14 @@ function languageFloor(languagePreference: ContextInput["languagePreference"]) {
   }
 }
 
+function languageSoftFloor(languagePreference: ContextInput["languagePreference"]) {
+  if (languagePreference === "any") {
+    return 0;
+  }
+
+  return Math.max(languageFloor(languagePreference) - 0.18, 0.34);
+}
+
 function enforceLanguagePreference(tracks: SpotifyTrack[], languagePreference: ContextInput["languagePreference"]) {
   if (languagePreference === "any") {
     return tracks;
@@ -218,17 +226,28 @@ function languageLockedQueries(context: ContextInput) {
 }
 
 function languageRescueQueries(context: ContextInput) {
+  const moodHint =
+    context.mood === "focused"
+      ? "focused"
+      : context.mood === "calm"
+        ? "soft"
+        : context.mood === "energetic"
+          ? "upbeat"
+          : context.mood === "melancholic"
+            ? "melancholic"
+            : "social";
+
   switch (context.languagePreference) {
     case "any":
       return [] as string[];
     case "english":
-      return ["english indie", "uk alternative", "american indie"];
+      return ["english indie", `english indie ${moodHint}`, "uk alternative"];
     case "greek":
-      return ["greek indie", "entechno", "greek singer songwriter"];
+      return ["greek indie", `greek indie ${moodHint}`, "greek singer songwriter"];
     case "spanish":
-      return ["musica en espanol", "spanish indie", "latin alternative"];
+      return ["musica en espanol", `spanish indie ${moodHint}`, "latin alternative"];
     case "portuguese":
-      return ["musica brasileira", "mpb", "brazilian indie"];
+      return ["musica brasileira", `brazilian indie ${moodHint}`, "mpb"];
   }
 }
 
@@ -262,13 +281,16 @@ async function searchLanguageRescueTracks(
     queries.map((query) => swallowSpotify403(() => searchTracks(query, 8), []))
   );
 
-  return uniqueTracks(searchGroups.flat())
-    .filter(
-      (track) =>
-        !excludeTrackIds.includes(track.id) &&
-        languageFit(track, context.languagePreference) >= languageFloor(context.languagePreference)
-    )
-    .slice(0, 12);
+  const unique = uniqueTracks(searchGroups.flat()).filter((track) => !excludeTrackIds.includes(track.id));
+  const strict = unique.filter((track) => languageFit(track, context.languagePreference) >= languageFloor(context.languagePreference));
+
+  if (strict.length) {
+    return strict.slice(0, 12);
+  }
+
+  return unique
+    .filter((track) => languageFit(track, context.languagePreference) >= languageSoftFloor(context.languagePreference))
+    .slice(0, 10);
 }
 
 function timeOfDaySearchHints(timeOfDay: ContextInput["timeOfDay"]) {
