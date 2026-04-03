@@ -182,6 +182,67 @@ function contextOnlySearchQueries(context: ContextInput) {
   ].filter(Boolean) as string[];
 }
 
+function buildFamiliaritySets(source: ProfileSource) {
+  return {
+    topTrackIds: new Set(source.topTracks.map((track) => track.id)),
+    recentTrackIds: new Set(source.recentTracks.map((track) => track.id)),
+    playlistTrackIds: new Set(source.playlistTracks.map((track) => track.id))
+  };
+}
+
+async function buildSafeRecallTracks(
+  source: ProfileSource,
+  profile: TasteProfile,
+  context: ContextInput,
+  target: AudioFeatures,
+  dailySalt: string
+) {
+  const familiarPool = uniqueTracks([...source.topTracks, ...source.recentTracks, ...source.playlistTracks]).slice(0, 50);
+
+  if (!familiarPool.length) {
+    return [] as RankedTrack[];
+  }
+
+  const familiaritySets = buildFamiliaritySets(source);
+  const audioFeaturesByTrackId = await getAudioFeatures(familiarPool.map((track) => track.id));
+  const safety = normalize(context.familiarity, 0, 100);
+
+  return familiarPool
+    .map((track) => {
+      const features = audioFeaturesByTrackId[track.id] || DEFAULT_AUDIO_FEATURES;
+      const similarity = clamp(1 - tasteDistance(target, features) / 1.5, 0, 1);
+      const contextFit =
+        clamp(1 - Math.abs(target.energy - features.energy), 0, 1) * 0.32 +
+        clamp(1 - Math.abs(target.valence - features.valence), 0, 1) * 0.18 +
+        clamp(1 - Math.abs(target.danceability - features.danceability), 0, 1) * 0.14 +
+        clamp(1 - Math.abs(target.tempo - features.tempo) / 70, 0, 1) * 0.18 +
+        languageFit(track, context.languagePreference) * 0.18;
+      const familiarityRecall =
+        (familiaritySets.topTrackIds.has(track.id) ? 0.6 : 0) +
+        (familiaritySets.recentTrackIds.has(track.id) ? 0.22 : 0) +
+        (familiaritySets.playlistTrackIds.has(track.id) ? 0.16 : 0) +
+        clamp(normalize(track.popularity, 35, 90), 0, 1) * 0.12;
+      const score =
+        similarity * (0.34 + safety * 0.14) +
+        contextFit * 0.22 +
+        familiarityRecall * (0.26 + safety * 0.3) +
+        seededValue(`${dailySalt}:safe:${track.id}`) * 0.02;
+
+      return {
+        ...track,
+        score,
+        similarity,
+        novelty: clamp(1 - familiarityRecall, 0, 1) * 0.3,
+        contextFit,
+        reason: {
+          headline: "Comfort-zone anchor",
+          detail: `This is a highly familiar-feeling pick pulled closer to your known listening so the batch can feel safer and more immediately rewarding.`
+        }
+      } satisfies RankedTrack;
+    })
+    .sort((left, right) => right.score - left.score);
+}
+
 async function buildContextOnlyRecommendations(context: ContextInput) {
   const dailySalt = `${new Date().toISOString().slice(0, 10)}:${context.refreshKey || "0"}`;
   const queries = contextOnlySearchQueries(context);
@@ -684,8 +745,9 @@ export async function generateDailyRecommendations(context: ContextInput) {
   const safety = normalize(context.familiarity, 0, 100);
   const exploration = 1 - safety;
   const dailySalt = `${new Date().toISOString().slice(0, 10)}:${context.refreshKey || "0"}`;
+  const safeRecallTracks = safety >= 0.72 ? await buildSafeRecallTracks(source, profile, context, target, dailySalt) : [];
 
-  const ranked: RankedTrack[] = candidates
+  const discoveryRanked: RankedTrack[] = candidates
     .map((track) => {
       const features = audioFeaturesByTrackId[track.id] || DEFAULT_AUDIO_FEATURES;
       const distance = tasteDistance(target, features);
@@ -719,13 +781,20 @@ export async function generateDailyRecommendations(context: ContextInput) {
         reason
       };
     })
-    .filter((track) => track.popularity <= 82)
+    .filter((track) => (safety >= 0.72 ? track.popularity <= 92 : track.popularity <= 82))
     .sort((a, b) => b.score - a.score);
+
+  const ranked: RankedTrack[] =
+    safety >= 0.72
+      ? uniqueBy([...safeRecallTracks, ...discoveryRanked], (track) => canonicalTrackKey(track)).sort((a, b) => b.score - a.score)
+      : discoveryRanked;
 
   const artistCap = new Map<string, number>();
   const trackKeyCap = new Set<string>();
   const titleCap = new Map<string, number>();
   const finalTracks: RankedTrack[] = [];
+  const artistLimit = safety >= 0.78 ? 2 : 1;
+  const titleLimit = safety >= 0.9 ? 2 : 1;
 
   for (const track of ranked) {
     const leadArtistId = track.artists[0]?.id;
@@ -734,7 +803,7 @@ export async function generateDailyRecommendations(context: ContextInput) {
     const titleKey = canonicalTitleKey(track);
     const titleCount = titleCap.get(titleKey) || 0;
 
-    if (leadArtistId && currentCount >= 1) {
+    if (leadArtistId && currentCount >= artistLimit) {
       continue;
     }
 
@@ -742,7 +811,7 @@ export async function generateDailyRecommendations(context: ContextInput) {
       continue;
     }
 
-    if (titleCount >= 1) {
+    if (titleCount >= titleLimit) {
       continue;
     }
 
