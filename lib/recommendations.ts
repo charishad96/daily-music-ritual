@@ -85,6 +85,13 @@ const LANGUAGE_LABELS: Record<ContextInput["languagePreference"], string> = {
 
 const MIN_LANGUAGE_BATCH = 5;
 
+const LANGUAGE_LEXICAL_SEEDS: Record<Exclude<ContextInput["languagePreference"], "any">, string[]> = {
+  english: ["love", "night", "heart", "dream"],
+  greek: ["αγαπη", "καρδια", "ονειρο", "νυχτα"],
+  spanish: ["amor", "corazon", "vida", "noche", "quiero"],
+  portuguese: ["amor", "coracao", "vida", "noite", "saudade"]
+};
+
 function extractPlaylistIds(inputs: string[]) {
   return [
     ...new Set(
@@ -276,21 +283,28 @@ async function searchLanguageRescueTracks(
     return [] as SpotifyTrack[];
   }
 
-  const queries = languageRescueQueries(context);
+  const lexicalQueries = LANGUAGE_LEXICAL_SEEDS[context.languagePreference].slice(0, 3);
+  const queries = [...languageRescueQueries(context), ...lexicalQueries];
   const searchGroups = await Promise.all(
-    queries.map((query) => swallowSpotify403(() => searchTracks(query, 8), []))
+    queries.map((query) => swallowSpotify403(() => searchTracks(query, 6), []))
   );
 
   const unique = uniqueTracks(searchGroups.flat()).filter((track) => !excludeTrackIds.includes(track.id));
   const strict = unique.filter((track) => languageFit(track, context.languagePreference) >= languageFloor(context.languagePreference));
 
-  if (strict.length) {
+  if (strict.length >= MIN_LANGUAGE_BATCH) {
     return strict.slice(0, 12);
   }
 
-  return unique
+  const soft = unique
     .filter((track) => languageFit(track, context.languagePreference) >= languageSoftFloor(context.languagePreference))
-    .slice(0, 10);
+    .slice(0, 12);
+
+  if (strict.length) {
+    return uniqueTracks([...strict, ...soft]).slice(0, 12);
+  }
+
+  return soft;
 }
 
 function timeOfDaySearchHints(timeOfDay: ContextInput["timeOfDay"]) {
