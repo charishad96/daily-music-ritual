@@ -409,6 +409,62 @@ async function buildSafeRecallTracks(
     .sort((left, right) => right.score - left.score);
 }
 
+async function buildKnownPoolRescueTracks(
+  source: ProfileSource,
+  context: ContextInput,
+  target: AudioFeatures,
+  dailySalt: string
+) {
+  const familiarPool = uniqueTracks([
+    ...source.topTracks,
+    ...source.recentTracks,
+    ...source.playlistTracks,
+    ...source.friendSignalTracks
+  ]).slice(0, 60);
+
+  if (!familiarPool.length) {
+    return [] as RankedTrack[];
+  }
+
+  const filteredPool = isLanguageLocked(context.languagePreference)
+    ? familiarPool.filter((track) => languageFit(track, context.languagePreference) >= languageSoftFloor(context.languagePreference))
+    : familiarPool;
+
+  if (!filteredPool.length) {
+    return [] as RankedTrack[];
+  }
+
+  const audioFeaturesByTrackId = await getAudioFeatures(filteredPool.map((track) => track.id));
+
+  return filteredPool
+    .map((track) => {
+      const features = audioFeaturesByTrackId[track.id] || DEFAULT_AUDIO_FEATURES;
+      const similarity = clamp(1 - tasteDistance(target, features) / 1.55, 0, 1);
+      const contextFit =
+        clamp(1 - Math.abs(target.energy - features.energy), 0, 1) * 0.34 +
+        clamp(1 - Math.abs(target.valence - features.valence), 0, 1) * 0.2 +
+        clamp(1 - Math.abs(target.danceability - features.danceability), 0, 1) * 0.14 +
+        clamp(1 - Math.abs(target.tempo - features.tempo) / 70, 0, 1) * 0.14 +
+        languageFit(track, context.languagePreference) * 0.18;
+      const familiarity = clamp(normalize(track.popularity, 25, 90), 0, 1);
+      const score = similarity * 0.4 + contextFit * 0.36 + familiarity * 0.18 + seededValue(`${dailySalt}:known:${track.id}`) * 0.06;
+
+      return {
+        ...track,
+        score,
+        similarity,
+        novelty: clamp(1 - familiarity, 0, 1) * 0.22,
+        contextFit,
+        reason: {
+          headline: "Known-pool rescue",
+          detail: "Spotify search came back too thin, so this batch falls back to stronger matches from your own broader listening pool."
+        }
+      } satisfies RankedTrack;
+    })
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 12);
+}
+
 async function buildContextOnlyRecommendations(context: ContextInput) {
   const dailySalt = `${new Date().toISOString().slice(0, 10)}:${context.refreshKey || "0"}`;
   const queries = contextOnlySearchQueries(context);
@@ -1059,6 +1115,18 @@ export async function generateDailyRecommendations(context: ContextInput) {
   }
 
   if (!finalTracks.length) {
+    const knownPoolRescue = await buildKnownPoolRescueTracks(source, context, target, dailySalt);
+
+    if (knownPoolRescue.length) {
+      return {
+        profileSummary: {
+          dominantGenres: profile.dominantGenres,
+          averageFeatures: profile.averageFeatures
+        },
+        tracks: knownPoolRescue
+      };
+    }
+
     const languageRescue =
       isLanguageLocked(context.languagePreference)
         ? await searchLanguageRescueTracks(
