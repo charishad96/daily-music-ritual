@@ -97,6 +97,13 @@ export function Dashboard() {
         return;
       }
 
+      if (!data.tracks?.length) {
+        setTracks([]);
+        setProfileSummary(data.profileSummary || null);
+        setError("We couldn't build a strong batch from this profile yet, so try another vibe or add a playlist signal.");
+        return;
+      }
+
       setTracks(data.tracks);
       setProfileSummary(data.profileSummary);
       setLastRunContextKey(contextKey);

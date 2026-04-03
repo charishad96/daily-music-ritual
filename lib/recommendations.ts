@@ -53,10 +53,10 @@ async function swallowSpotify403<T>(work: () => Promise<T>, fallback: T): Promis
 
 const LANGUAGE_QUERY_HINTS: Record<ContextInput["languagePreference"], string[]> = {
   any: [],
-  english: ["english indie", "english alternative", "uk indie"],
-  greek: ["greek indie", "ellinika", "greek alternative"],
-  spanish: ["spanish indie", "espanol alternative", "latin indie"],
-  portuguese: ["mpb", "brazilian indie", "portuguese alternative"]
+  english: ["english indie", "english alternative", "uk indie", "american indie"],
+  greek: ["ellinika", "greek indie", "greek alternative", "greek pop", "entechno", "greek rock"],
+  spanish: ["musica en espanol", "indie espanol", "spanish indie", "latin alternative", "argentine indie", "mexican indie"],
+  portuguese: ["mpb", "musica brasileira", "brazilian indie", "nova mpb", "portuguese indie", "brazilian soul"]
 };
 
 const LANGUAGE_LABELS: Record<ContextInput["languagePreference"], string> = {
@@ -79,6 +79,14 @@ function textContainsGreek(text: string) {
   return /[\u0370-\u03ff]/.test(text);
 }
 
+function textContainsLatinDiacritics(text: string) {
+  return /(á|é|í|ó|ú|ñ|ü|ã|õ|â|ê|ô|à|ç)/i.test(text);
+}
+
+function textIncludesAny(text: string, tokens: string[]) {
+  return tokens.some((token) => text.includes(token));
+}
+
 function languageFit(track: SpotifyTrack, languagePreference: ContextInput["languagePreference"]) {
   if (languagePreference === "any") {
     return 0.5;
@@ -88,16 +96,49 @@ function languageFit(track: SpotifyTrack, languagePreference: ContextInput["lang
 
   switch (languagePreference) {
     case "english":
-      return textContainsGreek(haystack) ? 0.1 : 0.75;
+      return textContainsGreek(haystack) ? 0.05 : textContainsLatinDiacritics(haystack) ? 0.42 : 0.78;
     case "greek":
-      return textContainsGreek(haystack) || haystack.includes("greek") || haystack.includes("ellin") ? 1 : 0.08;
+      return textContainsGreek(haystack) || textIncludesAny(haystack, ["greek", "ellin", "entechno"]) ? 1 : 0.04;
     case "spanish":
-      return haystack.includes("spanish") || haystack.includes("espan") || haystack.includes("latin") ? 1 : 0.12;
+      return textIncludesAny(haystack, ["espan", "spanish", "latin", "argentin", "mexic", "reggaeton", "cancion"]) ||
+        textContainsLatinDiacritics(haystack)
+        ? 0.92
+        : 0.06;
     case "portuguese":
-      return haystack.includes("brazil") || haystack.includes("brasil") || haystack.includes("portugu") || haystack.includes("mpb")
-        ? 1
-        : 0.12;
+      return textIncludesAny(haystack, ["brazil", "brasil", "portugu", "mpb", "nova mpb"]) || /(ã|õ|ç)/i.test(haystack)
+        ? 0.94
+        : 0.06;
   }
+}
+
+function languageFloor(languagePreference: ContextInput["languagePreference"]) {
+  switch (languagePreference) {
+    case "any":
+      return 0;
+    case "english":
+      return 0.35;
+    case "greek":
+      return 0.72;
+    case "spanish":
+      return 0.68;
+    case "portuguese":
+      return 0.68;
+  }
+}
+
+function enforceLanguagePreference(tracks: SpotifyTrack[], languagePreference: ContextInput["languagePreference"]) {
+  if (languagePreference === "any") {
+    return tracks;
+  }
+
+  const strictMatches = tracks.filter((track) => languageFit(track, languagePreference) >= languageFloor(languagePreference));
+
+  if (strictMatches.length >= 12) {
+    return strictMatches;
+  }
+
+  const softMatches = tracks.filter((track) => languageFit(track, languagePreference) >= languageFloor(languagePreference) - 0.14);
+  return softMatches.length >= 8 ? softMatches : strictMatches.length ? strictMatches : tracks;
 }
 
 function timeOfDaySearchHints(timeOfDay: ContextInput["timeOfDay"]) {
@@ -130,7 +171,14 @@ function contextOnlySearchQueries(context: ContextInput) {
       : context.energyLevel === "low"
         ? "soft atmospheric"
         : "midtempo discovery",
-    ...LANGUAGE_QUERY_HINTS[context.languagePreference]
+    ...LANGUAGE_QUERY_HINTS[context.languagePreference],
+    ...(context.languagePreference === "greek"
+      ? ["greek singer songwriter", "athens indie"]
+      : context.languagePreference === "spanish"
+        ? ["latin singer songwriter", "indie latino"]
+        : context.languagePreference === "portuguese"
+          ? ["brazilian singer songwriter", "indie brasileiro"]
+          : [])
   ].filter(Boolean) as string[];
 }
 
@@ -140,7 +188,7 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
   const searchGroups = await Promise.all(
     queries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
   );
-  const candidates = uniqueTracks(searchGroups.flat()).filter(
+  const candidates = enforceLanguagePreference(uniqueTracks(searchGroups.flat()), context.languagePreference).filter(
     (track) => !(context.excludeTrackIds || []).includes(track.id)
   );
   const audioFeaturesByTrackId = await getAudioFeatures(candidates.map((track) => track.id));
@@ -204,6 +252,46 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
     if (finalTracks.length === 24) {
       break;
     }
+  }
+
+  if (!finalTracks.length) {
+    const widenedQueries = [
+      context.mood === "calm"
+        ? "ambient"
+        : context.mood === "focused"
+          ? "instrumental electronic"
+          : context.mood === "energetic"
+            ? "indie dance"
+            : context.mood === "melancholic"
+              ? "slowcore"
+              : "indie soul",
+      context.energyLevel === "high" ? "upbeat" : context.energyLevel === "low" ? "soft" : "midtempo"
+    ];
+    const widenedSearchGroups = await Promise.all(
+      widenedQueries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
+    );
+    const widenedTracks = uniqueTracks(widenedSearchGroups.flat()).slice(0, 24);
+
+    return {
+      profileSummary: {
+        dominantGenres: queries.slice(0, 5),
+        averageFeatures: {
+          energy: target.energy,
+          valence: target.valence
+        }
+      },
+      tracks: widenedTracks.map((track, index) => ({
+        ...track,
+        score: 0.32 - index * 0.001,
+        similarity: 0.42,
+        novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
+        contextFit: 0.44,
+        reason: {
+          headline: "Recovery fallback",
+          detail: "Your profile was too sparse for a strong first pass, so this batch widens the search instead of failing silently."
+        }
+      }))
+    };
   }
 
   return {
@@ -494,12 +582,15 @@ async function expandCandidates(
     broadFallbackQueries.map((query) => swallowSpotify403(() => searchTracks(`${query}${decadeQuery}`, 25), []))
   );
 
-  const candidates = uniqueTracks([
-    ...recommendationTracks,
-    ...relatedArtistTrackGroups.flat(),
-    ...genreSearchGroups.flat(),
-    ...broadFallbackSearchGroups.flat()
-  ]);
+  const candidates = enforceLanguagePreference(
+    uniqueTracks([
+      ...recommendationTracks,
+      ...relatedArtistTrackGroups.flat(),
+      ...genreSearchGroups.flat(),
+      ...broadFallbackSearchGroups.flat()
+    ]),
+    context.languagePreference
+  );
   const filteredCandidates = candidates.filter(
     (track) =>
       !profile.excludedTrackIds.has(track.id) &&
@@ -687,7 +778,7 @@ export async function generateDailyRecommendations(context: ContextInput) {
     const emergencySearchGroups = await Promise.all(
       emergencyQueries.map((query) => swallowSpotify403(() => searchTracks(query, 30), []))
     );
-    const emergencyTracks = uniqueTracks(emergencySearchGroups.flat())
+    const emergencyTracks = enforceLanguagePreference(uniqueTracks(emergencySearchGroups.flat()), context.languagePreference)
       .filter((track) => !profile.excludedTrackIds.has(track.id) && !profile.excludedTrackKeys.has(canonicalTrackKey(track)))
       .sort(
         (left, right) =>
@@ -729,3 +820,4 @@ export async function generateDailyRecommendations(context: ContextInput) {
     tracks: finalTracks
   };
 }
+
