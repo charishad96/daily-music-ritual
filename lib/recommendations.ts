@@ -53,10 +53,26 @@ async function swallowSpotify403<T>(work: () => Promise<T>, fallback: T): Promis
 
 const LANGUAGE_QUERY_HINTS: Record<ContextInput["languagePreference"], string[]> = {
   any: [],
-  english: ["english indie", "english alternative", "uk indie", "american indie"],
-  greek: ["ellinika", "greek indie", "greek alternative", "greek pop", "entechno", "greek rock"],
-  spanish: ["musica en espanol", "indie espanol", "spanish indie", "latin alternative", "argentine indie", "mexican indie"],
-  portuguese: ["mpb", "musica brasileira", "brazilian indie", "nova mpb", "portuguese indie", "brazilian soul"]
+  english: ["english indie", "english alternative", "uk indie", "american indie", "indie singer songwriter"],
+  greek: ["ellinika", "greek indie", "greek alternative", "greek pop", "entechno", "greek rock", "athens indie"],
+  spanish: [
+    "musica en espanol",
+    "indie espanol",
+    "spanish indie",
+    "latin alternative",
+    "argentine indie",
+    "mexican indie",
+    "indie latino"
+  ],
+  portuguese: [
+    "mpb",
+    "musica brasileira",
+    "brazilian indie",
+    "nova mpb",
+    "portuguese indie",
+    "brazilian soul",
+    "indie brasileiro"
+  ]
 };
 
 const LANGUAGE_LABELS: Record<ContextInput["languagePreference"], string> = {
@@ -100,12 +116,12 @@ function languageFit(track: SpotifyTrack, languagePreference: ContextInput["lang
     case "greek":
       return textContainsGreek(haystack) || textIncludesAny(haystack, ["greek", "ellin", "entechno"]) ? 1 : 0.04;
     case "spanish":
-      return textIncludesAny(haystack, ["espan", "spanish", "latin", "argentin", "mexic", "reggaeton", "cancion"]) ||
+      return textIncludesAny(haystack, ["espan", "spanish", "latin", "argentin", "mexic", "reggaeton", "cancion", "latino"]) ||
         textContainsLatinDiacritics(haystack)
         ? 0.92
         : 0.06;
     case "portuguese":
-      return textIncludesAny(haystack, ["brazil", "brasil", "portugu", "mpb", "nova mpb"]) || /(ã|õ|ç)/i.test(haystack)
+      return textIncludesAny(haystack, ["brazil", "brasil", "portugu", "mpb", "nova mpb", "brasileiro"]) || /[\u00e3\u00f5\u00e7]/i.test(haystack)
         ? 0.94
         : 0.06;
   }
@@ -138,7 +154,16 @@ function enforceLanguagePreference(tracks: SpotifyTrack[], languagePreference: C
   }
 
   const softMatches = tracks.filter((track) => languageFit(track, languagePreference) >= languageFloor(languagePreference) - 0.14);
-  return softMatches.length >= 8 ? softMatches : strictMatches.length ? strictMatches : tracks;
+
+  if (softMatches.length >= 8) {
+    return softMatches;
+  }
+
+  if (strictMatches.length) {
+    return strictMatches;
+  }
+
+  return softMatches.length ? softMatches : tracks;
 }
 
 function timeOfDaySearchHints(timeOfDay: ContextInput["timeOfDay"]) {
@@ -889,4 +914,5 @@ export async function generateDailyRecommendations(context: ContextInput) {
     tracks: finalTracks
   };
 }
+
 
