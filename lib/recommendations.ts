@@ -166,6 +166,26 @@ function enforceLanguagePreference(tracks: SpotifyTrack[], languagePreference: C
   return softMatches.length ? softMatches : tracks;
 }
 
+function isLanguageLocked(languagePreference: ContextInput["languagePreference"]) {
+  return languagePreference !== "any";
+}
+
+async function searchLanguageLockedTracks(queries: string[], languagePreference: ContextInput["languagePreference"]) {
+  if (!isLanguageLocked(languagePreference)) {
+    return [] as SpotifyTrack[];
+  }
+
+  const searchGroups = await Promise.all(
+    queries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
+  );
+
+  const languageFirst = uniqueTracks(searchGroups.flat()).filter(
+    (track) => languageFit(track, languagePreference) >= languageFloor(languagePreference) - 0.08
+  );
+
+  return languageFirst;
+}
+
 function timeOfDaySearchHints(timeOfDay: ContextInput["timeOfDay"]) {
   switch (timeOfDay) {
     case "morning":
@@ -271,9 +291,10 @@ async function buildSafeRecallTracks(
 async function buildContextOnlyRecommendations(context: ContextInput) {
   const dailySalt = `${new Date().toISOString().slice(0, 10)}:${context.refreshKey || "0"}`;
   const queries = contextOnlySearchQueries(context);
-  const searchGroups = await Promise.all(
-    queries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
-  );
+  const lockedTracks = await searchLanguageLockedTracks(queries, context.languagePreference);
+  const searchGroups = lockedTracks.length
+    ? [lockedTracks]
+    : await Promise.all(queries.map((query) => swallowSpotify403(() => searchTracks(query, 10), [])));
   const candidates = enforceLanguagePreference(uniqueTracks(searchGroups.flat()), context.languagePreference).filter(
     (track) => !(context.excludeTrackIds || []).includes(track.id)
   );
@@ -667,13 +688,16 @@ async function expandCandidates(
   const broadFallbackSearchGroups = await Promise.all(
     broadFallbackQueries.map((query) => swallowSpotify403(() => searchTracks(`${query}${decadeQuery}`, 25), []))
   );
+  const languageLockedTracks = await searchLanguageLockedTracks(broadFallbackQueries, context.languagePreference);
 
   const candidates = enforceLanguagePreference(
     uniqueTracks([
-      ...recommendationTracks,
-      ...relatedArtistTrackGroups.flat(),
+      ...(languageLockedTracks.length ? [] : recommendationTracks),
+      ...(languageLockedTracks.length ? [] : relatedArtistTrackGroups.flat()),
       ...genreSearchGroups.flat(),
       ...broadFallbackSearchGroups.flat()
+      ,
+      ...languageLockedTracks
     ]),
     context.languagePreference
   );
