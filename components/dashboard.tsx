@@ -90,7 +90,7 @@ export function Dashboard() {
       if (!data.tracks?.length) {
         setTracks([]);
         setProfileSummary(data.profileSummary || null);
-        setError("We couldn't pull a full batch just yet, so try another vibe or hit New batch again.");
+        setError("We couldn't build a strong batch from this profile yet, so try another vibe or add a playlist signal.");
         return;
       }
 
