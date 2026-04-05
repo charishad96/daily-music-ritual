@@ -412,9 +412,12 @@ async function buildSafeRecallTracks(
   profile: TasteProfile,
   context: ContextInput,
   target: AudioFeatures,
-  dailySalt: string
+  dailySalt: string,
+  excludeTrackIds: string[] = []
 ) {
-  const familiarPool = uniqueTracks([...source.topTracks, ...source.recentTracks, ...source.playlistTracks]).slice(0, 50);
+  const familiarPool = uniqueTracks([...source.topTracks, ...source.recentTracks, ...source.playlistTracks])
+    .filter((track) => !excludeTrackIds.includes(track.id))
+    .slice(0, 50);
 
   if (!familiarPool.length) {
     return [] as RankedTrack[];
@@ -443,7 +446,7 @@ async function buildSafeRecallTracks(
         similarity * (0.34 + safety * 0.14) +
         contextFit * 0.22 +
         familiarityRecall * (0.26 + safety * 0.3) +
-        seededValue(`${dailySalt}:safe:${track.id}`) * 0.02;
+        seededValue(`${dailySalt}:safe:${track.id}`) * 0.06;
 
       return {
         ...track,
@@ -1228,7 +1231,10 @@ export async function generateDailyRecommendations(context: ContextInput) {
   const safety = normalize(context.familiarity, 0, 100);
   const exploration = 1 - safety;
   const dailySalt = `${new Date().toISOString().slice(0, 10)}:${context.refreshKey || "0"}`;
-  const safeRecallTracks = safety >= 0.72 ? await buildSafeRecallTracks(source, profile, context, target, dailySalt) : [];
+  const safeRecallTracks =
+    safety >= 0.72
+      ? await buildSafeRecallTracks(source, profile, context, target, dailySalt, context.excludeTrackIds || [])
+      : [];
 
   const discoveryRanked: RankedTrack[] = candidates
     .map((track) => {
