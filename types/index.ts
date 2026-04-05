@@ -1,14 +1,10 @@
 export type Mood = "calm" | "focused" | "energetic" | "melancholic" | "social";
-export type TimeOfDay = "morning" | "afternoon" | "evening" | "night";
 export type EnergyLevel = "low" | "medium" | "high";
-export type DecadePreference = "any" | "90s" | "2000s" | "2010s" | "new";
 export type LanguagePreference = "any" | "english" | "greek" | "spanish" | "portuguese";
 
 export type ContextInput = {
   mood: Mood;
-  timeOfDay: TimeOfDay;
   energyLevel: EnergyLevel;
-  decadePreference: DecadePreference;
   languagePreference: LanguagePreference;
   familiarity: number;
   playlistIds: string[];

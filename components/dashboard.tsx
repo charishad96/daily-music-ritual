@@ -8,9 +8,7 @@ import type { BootstrapResponse, ContextInput, RankedTrack } from "@/types";
 
 const defaultContext: ContextInput = {
   mood: "focused",
-  timeOfDay: "morning",
   energyLevel: "medium",
-  decadePreference: "any",
   languagePreference: "any",
   familiarity: 38,
   playlistIds: [],
@@ -18,15 +16,7 @@ const defaultContext: ContextInput = {
 };
 
 const moods = ["calm", "focused", "energetic", "melancholic", "social"] as const;
-const times = ["morning", "afternoon", "evening", "night"] as const;
 const energyLevels = ["low", "medium", "high"] as const;
-const decadeOptions = [
-  { value: "any", label: "Any era" },
-  { value: "90s", label: "90s" },
-  { value: "2000s", label: "2000s" },
-  { value: "2010s", label: "2010s" },
-  { value: "new", label: "New releases" }
-] as const;
 
 export function Dashboard() {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
@@ -229,44 +219,12 @@ export function Dashboard() {
                 />
               </ControlGroup>
 
-              <ControlGroup label="Time of day">
-                <SegmentedRow
-                  value={context.timeOfDay}
-                  options={times}
-                  onChange={(timeOfDay) => setContext((current) => ({ ...current, timeOfDay }))}
-                />
-              </ControlGroup>
-
               <ControlGroup label="Energy">
                 <SegmentedRow
                   value={context.energyLevel}
                   options={energyLevels}
                   onChange={(energyLevel) => setContext((current) => ({ ...current, energyLevel }))}
                 />
-              </ControlGroup>
-
-              <ControlGroup label="Era tilt">
-                <div className="grid grid-cols-2 gap-2">
-                  {decadeOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() =>
-                        setContext((current) => ({
-                          ...current,
-                          decadePreference: option.value
-                        }))
-                      }
-                      className={`rounded-2xl border px-3 py-2 text-sm transition ${
-                        context.decadePreference === option.value
-                          ? "border-dusk bg-dusk text-white"
-                          : "border-dusk/12 bg-white/70 text-ink/68 hover:border-dusk/25"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
               </ControlGroup>
 
               <ControlGroup label="Familiarity">
@@ -351,7 +309,7 @@ export function Dashboard() {
                   <div className="text-xs uppercase tracking-[0.24em] text-dusk/55">Today&apos;s batch</div>
                   <h2 className="mt-1 text-3xl text-dusk">Build a focused set of deep cuts</h2>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/68">
-                    Current profile: {context.mood}, {context.timeOfDay}, {context.energyLevel} energy
+                    Current profile: {context.mood}, {context.energyLevel} energy
                     {selectedPlaylistNames.length ? `, seeded with ${selectedPlaylistNames.join(", ")}` : ""}
                     {friendSignalsSummary
                       ? `, plus ${friendSignalsSummary} friend vibe ${friendSignalsSummary === 1 ? "signal" : "signals"}`

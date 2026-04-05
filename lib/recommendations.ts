@@ -372,19 +372,6 @@ async function searchLanguageRescueTracks(
   return soft;
 }
 
-function timeOfDaySearchHints(timeOfDay: ContextInput["timeOfDay"]) {
-  switch (timeOfDay) {
-    case "morning":
-      return ["morning ambient", "dawn folk", "early day indie"];
-    case "afternoon":
-      return ["afternoon grooves", "warm indie soul", "daylight electronic"];
-    case "evening":
-      return ["evening soul", "golden hour indie", "nightfall pop"];
-    case "night":
-      return ["late night electronic", "midnight indie", "after dark soul"];
-  }
-}
-
 function contextOnlySearchQueries(context: ContextInput) {
   return [
     context.mood === "focused"
@@ -393,10 +380,9 @@ function contextOnlySearchQueries(context: ContextInput) {
         ? "ambient folk dream pop"
         : context.mood === "energetic"
           ? "indie dance alternative"
-          : context.mood === "melancholic"
+        : context.mood === "melancholic"
             ? "art pop slowcore"
             : "nu disco indie soul",
-    ...timeOfDaySearchHints(context.timeOfDay),
     context.energyLevel === "high"
       ? "upbeat alternative"
       : context.energyLevel === "low"
@@ -639,7 +625,6 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
     averageFeatures: {
       ...DEFAULT_AUDIO_FEATURES,
       ...mapMoodToFeatures(context.mood),
-      ...mapTimeToFeatures(context.timeOfDay),
       ...mapEnergyLevel(context.energyLevel)
     },
     dominantGenres: queries.slice(0, 4),
@@ -672,7 +657,7 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
         contextFit,
         reason: {
           headline: "Light-profile discovery mode",
-          detail: `Spotify gave very little taste history, so this batch leans on your ${context.mood} / ${context.timeOfDay} vibe${
+          detail: `Spotify gave very little taste history, so this batch leans on your ${context.mood} / ${context.energyLevel} energy vibe${
             context.languagePreference !== "any" ? ` with a ${LANGUAGE_LABELS[context.languagePreference].toLowerCase()} bias` : ""
           } while still trying to stay fresh.`
         }
@@ -921,19 +906,6 @@ function mapMoodToFeatures(mood: ContextInput["mood"]): Partial<AudioFeatures> {
   }
 }
 
-function mapTimeToFeatures(timeOfDay: ContextInput["timeOfDay"]): Partial<AudioFeatures> {
-  switch (timeOfDay) {
-    case "morning":
-      return { energy: 0.45, valence: 0.58, tempo: 102 };
-    case "afternoon":
-      return { energy: 0.6, valence: 0.56, tempo: 112 };
-    case "evening":
-      return { energy: 0.5, valence: 0.48, tempo: 108 };
-    case "night":
-      return { energy: 0.36, valence: 0.34, tempo: 94 };
-  }
-}
-
 function mapEnergyLevel(level: ContextInput["energyLevel"]): Partial<AudioFeatures> {
   switch (level) {
     case "low":
@@ -947,7 +919,6 @@ function mapEnergyLevel(level: ContextInput["energyLevel"]): Partial<AudioFeatur
 
 function buildTargetFeatures(profile: TasteProfile, context: ContextInput): AudioFeatures {
   const mood = mapMoodToFeatures(context.mood);
-  const time = mapTimeToFeatures(context.timeOfDay);
   const energy = mapEnergyLevel(context.energyLevel);
 
   return {
@@ -958,19 +929,19 @@ function buildTargetFeatures(profile: TasteProfile, context: ContextInput): Audi
       DEFAULT_AUDIO_FEATURES.danceability
     ),
     energy: average(
-      [profile.averageFeatures.energy, mood.energy, time.energy, energy.energy].filter(
+      [profile.averageFeatures.energy, mood.energy, energy.energy].filter(
         (value): value is number => typeof value === "number"
       ),
       DEFAULT_AUDIO_FEATURES.energy
     ),
     valence: average(
-      [profile.averageFeatures.valence, mood.valence, time.valence].filter(
+      [profile.averageFeatures.valence, mood.valence].filter(
         (value): value is number => typeof value === "number"
       ),
       DEFAULT_AUDIO_FEATURES.valence
     ),
     tempo: average(
-      [profile.averageFeatures.tempo, mood.tempo, time.tempo, energy.tempo].filter(
+      [profile.averageFeatures.tempo, mood.tempo, energy.tempo].filter(
         (value): value is number => typeof value === "number"
       ),
       DEFAULT_AUDIO_FEATURES.tempo
@@ -1118,16 +1089,7 @@ async function expandCandidates(
     relatedArtists.slice(0, 10).map((artist) => swallowSpotify403(() => getArtistTopTracks(artist.id), []))
   );
 
-  const decadeQuery =
-    context.decadePreference === "any"
-      ? ""
-      : context.decadePreference === "90s"
-        ? " year:1990-1999"
-        : context.decadePreference === "2000s"
-          ? " year:2000-2009"
-          : context.decadePreference === "2010s"
-            ? " year:2010-2019"
-            : " year:2022-2026";
+  const decadeQuery = "";
 
   const genreSearchGroups = await Promise.all(
     profile.dominantGenres
@@ -1147,7 +1109,6 @@ async function expandCandidates(
           : context.mood === "melancholic"
             ? "art pop"
             : "nu disco",
-    ...timeOfDaySearchHints(context.timeOfDay),
     context.energyLevel === "high"
       ? "high energy"
       : context.energyLevel === "low"
@@ -1209,17 +1170,10 @@ function tasteDistance(target: AudioFeatures, actual: AudioFeatures) {
 
 function decadeBonus(context: ContextInput, releaseDate?: string) {
   const year = releaseYear(releaseDate);
-  if (!year || context.decadePreference === "any") {
+  if (!year) {
     return 0.05;
   }
-
-  const matches =
-    (context.decadePreference === "90s" && year >= 1990 && year <= 1999) ||
-    (context.decadePreference === "2000s" && year >= 2000 && year <= 2009) ||
-    (context.decadePreference === "2010s" && year >= 2010 && year <= 2019) ||
-    (context.decadePreference === "new" && year >= 2022);
-
-  return matches ? 0.14 : -0.08;
+  return year >= 2022 ? 0.08 : 0.02;
 }
 
 function explainRecommendation(
@@ -1231,7 +1185,7 @@ function explainRecommendation(
   if (novelty > 0.72) {
     return {
       headline: "Fresh but still aligned",
-      detail: `Less obvious pick with a lower-popularity profile that still matches your ${context.mood} ${context.timeOfDay} lane.`
+      detail: `Less obvious pick with a lower-popularity profile that still matches your ${context.mood}, ${context.energyLevel}-energy lane.`
     };
   }
 
@@ -1422,7 +1376,6 @@ export async function generateDailyRecommendations(context: ContextInput) {
             : context.mood === "melancholic"
               ? "art pop"
               : "nu disco",
-      ...timeOfDaySearchHints(context.timeOfDay),
       ...LANGUAGE_QUERY_HINTS[context.languagePreference]
     ]
       .filter(Boolean)
@@ -1480,7 +1433,6 @@ export async function generateDailyRecommendations(context: ContextInput) {
             : context.mood === "melancholic"
               ? "art pop"
               : "nu disco",
-      ...timeOfDaySearchHints(context.timeOfDay)
     ].filter(Boolean) as string[];
 
     const searchTopUp = await buildSearchTopUpTracks(
