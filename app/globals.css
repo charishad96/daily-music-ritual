@@ -45,6 +45,16 @@ h3 {
   }
 }
 
+@keyframes source-marquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 .vinyl-record {
   position: relative;
   width: 232px;
@@ -134,4 +144,19 @@ h3 {
   transform: translate(-50%, -50%);
   background: #0f1112;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
+.source-marquee {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.source-marquee-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: max-content;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  animation: source-marquee 28s linear infinite;
 }

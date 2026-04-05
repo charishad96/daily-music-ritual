@@ -17,6 +17,18 @@ const defaultContext: ContextInput = {
 
 const moods = ["calm", "focused", "energetic", "melancholic", "social"] as const;
 const energyLevels = ["low", "medium", "high"] as const;
+const sourceWorlds = [
+  "Bandcamp Daily",
+  "NTS",
+  "Resident Advisor",
+  "KEXP",
+  "Worldwide FM",
+  "The Line of Best Fit",
+  "The Lot Radio",
+  "Le Mellotron",
+  "In Sheep's Clothing",
+  "Godfather, Tokyo"
+] as const;
 
 export function Dashboard() {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
@@ -134,27 +146,18 @@ export function Dashboard() {
               Break free from the loop.
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-8 text-ink/76 md:text-lg">
-              Spotify has the catalogue. What it no longer has, for most of us, is surprise. The same songs come back,
-              the same artists stay in rotation, and whole corners of music never get a chance to enter the room.
+              Spotify is brilliant at holding almost every song. What it is far less brilliant at, for most of us, is
+              helping us move beyond the same small circle of artists and tracks we already know.
             </p>
             <p className="mt-5 max-w-2xl text-base leading-8 text-ink/72">
-              This is a quieter alternative: connect your account, let the app understand your listening profile, choose
-              the mood you want now, and it steps outside Spotify&apos;s narrow graph to look through more considered worlds:
-              editorial digging, soundtrack intelligence, listening-room taste, and human curation that still fits you.
+              This is what we are solving. You connect your Spotify account so the app can understand your listening
+              profile, choose the mood you want right now, and it looks outward for fresher signals instead of staying
+              trapped inside Spotify&apos;s own recommendation loop. Then it brings the final picks straight back to Spotify,
+              ready to play or save in one click.
             </p>
-            <div className="mt-8 grid gap-4 md:grid-cols-3">
-              <div className="rounded-[1.4rem] border border-dusk/10 bg-white/65 px-4 py-4">
-                <div className="text-[0.65rem] uppercase tracking-[0.24em] text-dusk/48">Read your taste</div>
-                <p className="mt-2 text-sm leading-6 text-ink/68">Top tracks, recent listening, and artist patterns become a living taste profile.</p>
-              </div>
-              <div className="rounded-[1.4rem] border border-dusk/10 bg-white/65 px-4 py-4">
-                <div className="text-[0.65rem] uppercase tracking-[0.24em] text-dusk/48">Choose the mood</div>
-                <p className="mt-2 text-sm leading-6 text-ink/68">Set the tone you want, not the artist you already know.</p>
-              </div>
-              <div className="rounded-[1.4rem] border border-dusk/10 bg-white/65 px-4 py-4">
-                <div className="text-[0.65rem] uppercase tracking-[0.24em] text-dusk/48">Take it back to Spotify</div>
-                <p className="mt-2 text-sm leading-6 text-ink/68">Listen instantly, or save the whole batch as a playlist you&apos;ll actually revisit.</p>
-              </div>
+            <div className="mt-8">
+              <div className="mb-3 text-[0.68rem] uppercase tracking-[0.24em] text-dusk/48">Outside Spotify</div>
+              <SourceMarquee />
             </div>
           </div>
 
@@ -379,6 +382,25 @@ function VinylDisplay() {
           <div className="vinyl-label-inner" />
         </div>
         <div className="vinyl-hole" />
+      </div>
+    </div>
+  );
+}
+
+function SourceMarquee() {
+  const items = [...sourceWorlds, ...sourceWorlds];
+
+  return (
+    <div className="source-marquee rounded-[1.5rem] border border-dusk/10 bg-white/62 py-3">
+      <div className="source-marquee-track">
+        {items.map((item, index) => (
+          <span
+            key={`${item}-${index}`}
+            className="inline-flex items-center rounded-full border border-dusk/10 bg-white px-4 py-2 text-[0.72rem] uppercase tracking-[0.2em] text-dusk/72 shadow-[0_8px_24px_rgba(22,31,34,0.06)]"
+          >
+            {item}
+          </span>
+        ))}
       </div>
     </div>
   );
