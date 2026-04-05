@@ -668,18 +668,14 @@ async function buildGuaranteedFallbackTracks(
   excludeTrackIds: string[],
   dailySalt: string
 ) {
-  const broadQueries = pickSeededStrings(
-    [
-      ...contextOnlySearchQueries(context, `${dailySalt}:context-base`),
-      ...externalSourceSearchQueries(context, [], `${dailySalt}:external-base`),
-      `${context.mood} ${context.energyLevel}`,
-      `${context.mood} discovery`,
-      `${context.energyLevel} energy`,
-      `${context.mood} alternative`
-    ],
-    10,
-    `${dailySalt}:guaranteed`
-  );
+  const broadQueries = [
+    ...contextOnlySearchQueries(context, `${dailySalt}:context-base`),
+    ...externalSourceSearchQueries(context, [], `${dailySalt}:external-base`),
+    `${context.mood} ${context.energyLevel}`,
+    `${context.mood} discovery`,
+    `${context.energyLevel} energy`,
+    `${context.mood} alternative`
+  ].slice(0, 10);
 
   return buildSearchTopUpTracks(
     broadQueries,
