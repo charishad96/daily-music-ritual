@@ -83,6 +83,8 @@ export type RankedTrack = SpotifyTrack & {
 
 export type BootstrapResponse = {
   authenticated: boolean;
+  restricted?: boolean;
+  restrictionReason?: string;
   profile?: {
     id: string;
     display_name: string;
