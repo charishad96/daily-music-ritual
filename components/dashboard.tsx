@@ -122,32 +122,58 @@ export function Dashboard() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-7xl flex-col px-5 pb-12 pt-6 md:px-8">
-      <section className="relative overflow-hidden rounded-[2rem] border border-white/60 bg-white/55 px-6 py-7 shadow-halo md:px-10 md:py-10">
-        <div className="absolute inset-y-0 right-0 hidden w-1/3 bg-gradient-to-l from-gold/10 to-transparent md:block" />
-        <div className="relative flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-dusk/65">
+      <section className="relative overflow-hidden rounded-[2.4rem] border border-white/60 bg-white/55 px-6 py-7 shadow-halo md:px-10 md:py-10">
+        <div className="absolute inset-y-0 right-0 hidden w-1/3 bg-gradient-to-l from-gold/10 via-gold/5 to-transparent md:block" />
+        <div className="absolute -right-16 top-10 hidden h-72 w-72 rounded-full bg-gold/10 blur-3xl lg:block" />
+        <div className="relative grid gap-10 xl:grid-cols-[minmax(0,1.15fr)_420px]">
+          <div className="max-w-3xl">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-dusk/65">
               Daily Music Ritual
             </p>
-            <h1 className="max-w-xl text-5xl leading-none text-dusk md:text-7xl">
-              Fresh Spotify picks for the exact mood you are in.
+            <h1 className="max-w-3xl text-[3.2rem] leading-[0.94] text-dusk md:text-[5.3rem]">
+              Beyond the Spotify loop.
             </h1>
-            <p className="mt-4 max-w-xl text-sm leading-6 text-ink/72 md:text-base">
-              We blend your top tracks, recent listening, and favorite artists into a daily
-              recommendation batch that leans fresh, non-obvious, and context-aware.
+            <p className="mt-6 max-w-2xl text-base leading-8 text-ink/76 md:text-lg">
+              Spotify has the catalogue. What it no longer has, for most of us, is surprise. The same songs come back,
+              the same artists stay in rotation, and whole corners of music never get a chance to enter the room.
             </p>
-          </div>
-          <div className="glass rounded-[1.5rem] border border-white/70 px-5 py-4 text-sm text-ink/70">
-            <div className="text-xs uppercase tracking-[0.24em] text-dusk/60">{formatDateLabel()}</div>
-              <div className="mt-2 text-2xl font-semibold text-dusk">
-              {bootstrap?.restricted ? "Spotify account access blocked" : bootstrap?.authenticated ? "Ready to generate" : "Connect Spotify first"}
+            <p className="mt-5 max-w-2xl text-base leading-8 text-ink/72">
+              This is a quieter alternative: connect your account, let the app understand your listening profile, choose
+              the mood you want now, and it steps outside Spotify&apos;s narrow graph to look through more considered worlds:
+              editorial digging, soundtrack intelligence, listening-room taste, and human curation that still fits you.
+            </p>
+            <div className="mt-8 grid gap-4 md:grid-cols-3">
+              <div className="rounded-[1.4rem] border border-dusk/10 bg-white/65 px-4 py-4">
+                <div className="text-[0.65rem] uppercase tracking-[0.24em] text-dusk/48">Read your taste</div>
+                <p className="mt-2 text-sm leading-6 text-ink/68">Top tracks, recent listening, and artist patterns become a living taste profile.</p>
               </div>
-              <div className="mt-2 max-w-sm leading-6">
-              {bootstrap?.restricted
-                ? "This Spotify account signed in, but Spotify did not grant this app enough API access yet."
-                : "Keep the controls light, then pull a batch you can actually use right now."}
+              <div className="rounded-[1.4rem] border border-dusk/10 bg-white/65 px-4 py-4">
+                <div className="text-[0.65rem] uppercase tracking-[0.24em] text-dusk/48">Choose the mood</div>
+                <p className="mt-2 text-sm leading-6 text-ink/68">Set the tone you want, not the artist you already know.</p>
+              </div>
+              <div className="rounded-[1.4rem] border border-dusk/10 bg-white/65 px-4 py-4">
+                <div className="text-[0.65rem] uppercase tracking-[0.24em] text-dusk/48">Take it back to Spotify</div>
+                <p className="mt-2 text-sm leading-6 text-ink/68">Listen instantly, or save the whole batch as a playlist you&apos;ll actually revisit.</p>
               </div>
             </div>
+          </div>
+
+          <div className="flex flex-col items-center gap-6 xl:items-end">
+            <VinylDisplay />
+            <div className="glass w-full max-w-[420px] rounded-[1.7rem] border border-white/70 px-5 py-5 text-sm text-ink/70">
+              <div className="text-xs uppercase tracking-[0.24em] text-dusk/60">{formatDateLabel()}</div>
+              <div className="mt-3 text-2xl font-semibold text-dusk">
+                {bootstrap?.restricted ? "Spotify account access blocked" : bootstrap?.authenticated ? "Ready to generate" : "Connect Spotify first"}
+              </div>
+              <div className="mt-3 max-w-sm leading-6">
+                {bootstrap?.restricted
+                  ? "This Spotify account signed in, but Spotify did not grant this app enough API access yet."
+                  : bootstrap?.authenticated
+                    ? "Keep the controls light, pull a fresh batch, and save whatever lands."
+                    : "Let the app read your listening habits first, then it can start opening new doors."}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -156,8 +182,8 @@ export function Dashboard() {
           <div className="glass rounded-[2rem] border border-white/70 p-7">
             <h2 className="text-3xl text-dusk">Connect your Spotify taste profile</h2>
             <p className="mt-3 max-w-xl text-sm leading-6 text-ink/70">
-              The app reads your top tracks, top artists, and recently played songs. It then
-              looks for deeper cuts and context-fit discoveries instead of replaying your obvious favorites.
+              The app reads your top tracks, top artists, and recently played songs to understand what already feels like home,
+              then goes looking for what still has the power to surprise you.
             </p>
             <a
               href="/api/spotify/auth"
@@ -167,11 +193,11 @@ export function Dashboard() {
             </a>
           </div>
           <div className="rounded-[2rem] border border-dusk/10 bg-dusk p-7 text-rosewater shadow-halo">
-            <div className="text-xs uppercase tracking-[0.24em] text-rosewater/70">How it feels</div>
+            <div className="text-xs uppercase tracking-[0.24em] text-rosewater/70">What it is not</div>
             <ul className="mt-4 space-y-3 text-sm leading-6 text-rosewater/88">
-              <li>Lean controls instead of a crowded dashboard</li>
-              <li>Novelty bias that avoids your top and recent history</li>
-              <li>Playlist save for the batch that actually lands</li>
+              <li>Not another playlist that echoes your homepage back to you</li>
+              <li>Not a crowded dashboard built for power users</li>
+              <li>Not a black-box feed you can&apos;t steer</li>
             </ul>
           </div>
         </section>
@@ -338,6 +364,24 @@ export function Dashboard() {
         </section>
       ) : null}
     </main>
+  );
+}
+
+function VinylDisplay() {
+  return (
+    <div className="relative flex h-[320px] w-full max-w-[420px] items-center justify-center overflow-hidden rounded-[2rem] border border-white/70 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.96),rgba(244,238,228,0.88)_55%,rgba(227,215,196,0.65))] shadow-halo">
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.2),transparent_40%,rgba(27,52,66,0.08))]" />
+      <div className="vinyl-record">
+        <div className="vinyl-rings" />
+        <div className="vinyl-label">
+          <div className="vinyl-label-inner" />
+        </div>
+        <div className="vinyl-hole" />
+      </div>
+      <div className="pointer-events-none absolute bottom-6 left-6 rounded-full border border-white/70 bg-white/50 px-4 py-2 text-[0.68rem] uppercase tracking-[0.24em] text-dusk/58 backdrop-blur">
+        Listening-room energy
+      </div>
+    </div>
   );
 }
 
