@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { ReactNode } from "react";
 import { formatDateLabel } from "@/lib/utils";
 import type { BootstrapResponse, ContextInput, RankedTrack } from "@/types";
@@ -46,15 +46,6 @@ export function Dashboard() {
     });
   }, []);
 
-  const selectedPlaylistNames = useMemo(() => {
-    if (!bootstrap?.playlists) {
-      return [];
-    }
-
-    return bootstrap.playlists
-      .filter((playlist) => context.playlistIds.includes(playlist.id))
-      .map((playlist) => playlist.name);
-  }, [bootstrap?.playlists, context.playlistIds]);
   const friendSignalsSummary = context.friendPlaylistInputs.filter(Boolean).length;
 
   async function runRecommendations(nextRefreshCount = refreshCount) {
@@ -142,7 +133,7 @@ export function Dashboard() {
               Fresh Spotify picks for the exact mood you are in.
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-6 text-ink/72 md:text-base">
-              We blend your top tracks, recent listening, favorite artists, and optional playlists into a daily
+              We blend your top tracks, recent listening, and favorite artists into a daily
               recommendation batch that leans fresh, non-obvious, and context-aware.
             </p>
           </div>
@@ -165,7 +156,7 @@ export function Dashboard() {
           <div className="glass rounded-[2rem] border border-white/70 p-7">
             <h2 className="text-3xl text-dusk">Connect your Spotify taste profile</h2>
             <p className="mt-3 max-w-xl text-sm leading-6 text-ink/70">
-              The app reads your top tracks, top artists, recently played songs, and any playlists you choose. It then
+              The app reads your top tracks, top artists, and recently played songs. It then
               looks for deeper cuts and context-fit discoveries instead of replaying your obvious favorites.
             </p>
             <a
@@ -247,38 +238,6 @@ export function Dashboard() {
                 </div>
               </ControlGroup>
 
-              <ControlGroup label="Playlist signals">
-                <div className="max-h-52 space-y-2 overflow-auto pr-1">
-                  {bootstrap.playlists?.slice(0, 8).map((playlist) => {
-                    const selected = context.playlistIds.includes(playlist.id);
-                    return (
-                      <button
-                        key={playlist.id}
-                        type="button"
-                        onClick={() =>
-                          setContext((current) => ({
-                            ...current,
-                            playlistIds: selected
-                              ? current.playlistIds.filter((id) => id !== playlist.id)
-                              : [...current.playlistIds, playlist.id]
-                          }))
-                        }
-                        className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
-                          selected
-                            ? "border-pine bg-pine text-white"
-                            : "border-dusk/12 bg-white/75 text-ink/75 hover:border-dusk/25"
-                        }`}
-                      >
-                        <div className="text-sm font-semibold">{playlist.name}</div>
-                        <div className={`mt-1 text-xs ${selected ? "text-white/75" : "text-ink/50"}`}>
-                          {playlist.tracksTotal} tracks
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </ControlGroup>
-
               <ControlGroup label="Channel friends' signals">
                 <textarea
                   value={context.friendPlaylistInputs.join("\n")}
@@ -310,7 +269,6 @@ export function Dashboard() {
                   <h2 className="mt-1 text-3xl text-dusk">Build a focused set of deep cuts</h2>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/68">
                     Current profile: {context.mood}, {context.energyLevel} energy
-                    {selectedPlaylistNames.length ? `, seeded with ${selectedPlaylistNames.join(", ")}` : ""}
                     {friendSignalsSummary
                       ? `, plus ${friendSignalsSummary} friend vibe ${friendSignalsSummary === 1 ? "signal" : "signals"}`
                       : ""}.
