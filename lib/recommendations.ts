@@ -481,6 +481,7 @@ async function buildKnownPoolRescueTracks(
   dailySalt: string,
   excludeTrackIds: string[] = []
 ) {
+  const safety = normalize(context.familiarity, 0, 100);
   const familiarPool = uniqueTracks([
     ...source.topTracks,
     ...source.recentTracks,
@@ -488,6 +489,14 @@ async function buildKnownPoolRescueTracks(
     ...source.friendSignalTracks
   ])
     .filter((track) => !excludeTrackIds.includes(track.id))
+    .filter((track) => {
+      if (safety >= 0.72) {
+        return true;
+      }
+
+      return !source.topTracks.some((candidate) => candidate.id === track.id) &&
+        !source.recentTracks.some((candidate) => candidate.id === track.id);
+    })
     .slice(0, 60);
 
   if (!familiarPool.length) {
@@ -531,6 +540,34 @@ async function buildKnownPoolRescueTracks(
     })
     .sort((left, right) => right.score - left.score)
     .slice(0, 12);
+}
+
+async function buildSearchTopUpTracks(
+  queries: string[],
+  context: ContextInput,
+  excludeTrackIds: string[],
+  dailySalt: string,
+  headline = "Fresh top-up",
+  detail = "The first pass was too thin, so this batch was widened with adjacent discovery picks instead of falling back to your current rotation."
+) {
+  const searchGroups = await Promise.all(
+    queries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
+  );
+
+  return enforceLanguagePreference(uniqueTracks(searchGroups.flat()), context.languagePreference)
+    .filter((track) => !excludeTrackIds.includes(track.id))
+    .slice(0, 18)
+    .map((track, index) => ({
+      ...track,
+      score: 0.28 - index * 0.001,
+      similarity: 0.42,
+      novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
+      contextFit: 0.46,
+      reason: {
+        headline,
+        detail
+      }
+    } satisfies RankedTrack));
 }
 
 function appendUniqueRankedTracks(
@@ -1320,13 +1357,16 @@ export async function generateDailyRecommendations(context: ContextInput) {
   }
 
   if (!finalTracks.length) {
-    const knownPoolRescue = await buildKnownPoolRescueTracks(
-      source,
-      context,
-      target,
-      dailySalt,
-      context.excludeTrackIds || []
-    );
+    const knownPoolRescue =
+      safety >= 0.68
+        ? await buildKnownPoolRescueTracks(
+            source,
+            context,
+            target,
+            dailySalt,
+            context.excludeTrackIds || []
+          )
+        : [];
 
     if (knownPoolRescue.length) {
       return {
@@ -1424,6 +1464,55 @@ export async function generateDailyRecommendations(context: ContextInput) {
         averageFeatures: profile.averageFeatures
       },
       tracks: emergencyRanked
+    };
+  }
+
+  if (finalTracks.length < MIN_TARGET_BATCH) {
+    const topUpQueries = [
+      profile.dominantGenres[0],
+      profile.dominantGenres[1],
+      context.mood === "focused"
+        ? "indie alternative"
+        : context.mood === "calm"
+          ? "dream pop"
+          : context.mood === "energetic"
+            ? "indie dance"
+            : context.mood === "melancholic"
+              ? "art pop"
+              : "nu disco",
+      ...timeOfDaySearchHints(context.timeOfDay)
+    ].filter(Boolean) as string[];
+
+    const searchTopUp = await buildSearchTopUpTracks(
+      topUpQueries,
+      context,
+      [...(context.excludeTrackIds || []), ...finalTracks.map((track) => track.id)],
+      `${dailySalt}:topup`
+    );
+
+    const knownPoolTopUp =
+      safety >= 0.72
+        ? await buildKnownPoolRescueTracks(
+            source,
+            context,
+            target,
+            dailySalt,
+            [
+              ...(context.excludeTrackIds || []),
+              ...finalTracks.map((track) => track.id),
+              ...searchTopUp.map((track) => track.id)
+            ]
+          )
+        : [];
+
+    const toppedUp = appendUniqueRankedTracks(finalTracks, [...searchTopUp, ...knownPoolTopUp], 18);
+
+    return {
+      profileSummary: {
+        dominantGenres: profile.dominantGenres,
+        averageFeatures: profile.averageFeatures
+      },
+      tracks: toppedUp
     };
   }
 
