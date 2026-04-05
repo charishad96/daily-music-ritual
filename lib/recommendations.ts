@@ -669,8 +669,8 @@ async function buildGuaranteedFallbackTracks(
   dailySalt: string
 ) {
   const broadQueries = [
-    ...contextOnlySearchQueries(context, `${dailySalt}:context-base`),
-    ...externalSourceSearchQueries(context, [], `${dailySalt}:external-base`),
+    ...contextOnlySearchQueries(context),
+    ...externalSourceSearchQueries(context, []),
     `${context.mood} ${context.energyLevel}`,
     `${context.mood} discovery`,
     `${context.energyLevel} energy`,
