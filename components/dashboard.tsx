@@ -81,8 +81,8 @@ export function Dashboard() {
         },
         body: JSON.stringify({
           ...context,
-          excludeTrackIds: contextChanged ? [] : tracks.map((track) => track.id),
-          refreshKey: String(contextChanged ? nextRefreshCount + 1 : nextRefreshCount)
+          excludeTrackIds: tracks.map((track) => track.id),
+          refreshKey: String(nextRefreshCount)
         })
       });
 

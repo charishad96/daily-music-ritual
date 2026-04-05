@@ -84,6 +84,7 @@ const LANGUAGE_LABELS: Record<ContextInput["languagePreference"], string> = {
 };
 
 const MIN_LANGUAGE_BATCH = 5;
+const MIN_TARGET_BATCH = 12;
 
 const LANGUAGE_LEXICAL_SEEDS: Record<Exclude<ContextInput["languagePreference"], "any">, string[]> = {
   english: ["love", "night", "heart", "dream"],
@@ -477,14 +478,17 @@ async function buildKnownPoolRescueTracks(
   source: ProfileSource,
   context: ContextInput,
   target: AudioFeatures,
-  dailySalt: string
+  dailySalt: string,
+  excludeTrackIds: string[] = []
 ) {
   const familiarPool = uniqueTracks([
     ...source.topTracks,
     ...source.recentTracks,
     ...source.playlistTracks,
     ...source.friendSignalTracks
-  ]).slice(0, 60);
+  ])
+    .filter((track) => !excludeTrackIds.includes(track.id))
+    .slice(0, 60);
 
   if (!familiarPool.length) {
     return [] as RankedTrack[];
@@ -527,6 +531,51 @@ async function buildKnownPoolRescueTracks(
     })
     .sort((left, right) => right.score - left.score)
     .slice(0, 12);
+}
+
+function appendUniqueRankedTracks(
+  base: RankedTrack[],
+  additions: RankedTrack[],
+  targetCount = 24
+) {
+  const artistCap = new Map<string, number>();
+  const trackKeyCap = new Set<string>();
+  const titleCap = new Map<string, number>();
+  const merged: RankedTrack[] = [];
+
+  for (const track of [...base, ...additions]) {
+    const leadArtistId = track.artists[0]?.id;
+    const currentCount = leadArtistId ? artistCap.get(leadArtistId) || 0 : 0;
+    const trackKey = canonicalTrackKey(track);
+    const titleKey = canonicalTitleKey(track);
+    const titleCount = titleCap.get(titleKey) || 0;
+
+    if (leadArtistId && currentCount >= 2) {
+      continue;
+    }
+
+    if (trackKeyCap.has(trackKey)) {
+      continue;
+    }
+
+    if (titleCount >= 1) {
+      continue;
+    }
+
+    if (leadArtistId) {
+      artistCap.set(leadArtistId, currentCount + 1);
+    }
+
+    trackKeyCap.add(trackKey);
+    titleCap.set(titleKey, titleCount + 1);
+    merged.push(track);
+
+    if (merged.length >= targetCount) {
+      break;
+    }
+  }
+
+  return merged;
 }
 
 async function buildContextOnlyRecommendations(context: ContextInput) {
@@ -624,6 +673,51 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
     };
   }
 
+  if (finalTracks.length > 0 && finalTracks.length < MIN_TARGET_BATCH) {
+    const topUpQueries = [
+      context.mood === "calm"
+        ? "ambient"
+        : context.mood === "focused"
+          ? "instrumental electronic"
+          : context.mood === "energetic"
+            ? "indie dance"
+            : context.mood === "melancholic"
+              ? "slowcore"
+              : "indie soul",
+      context.energyLevel === "high" ? "upbeat" : context.energyLevel === "low" ? "soft" : "midtempo"
+    ];
+    const topUpSearchGroups = await Promise.all(
+      topUpQueries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
+    );
+    const topUpCandidates = uniqueTracks(topUpSearchGroups.flat())
+      .filter((track) => ![...(context.excludeTrackIds || []), ...finalTracks.map((existing) => existing.id)].includes(track.id))
+      .slice(0, 16)
+      .map((track, index) => ({
+        ...track,
+        score: 0.28 - index * 0.001,
+        similarity: 0.4,
+        novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
+        contextFit: 0.44,
+        reason: {
+          headline: "Top-up discovery",
+          detail: "The first pass was too thin, so this batch was widened slightly to keep it fresh and usable."
+        }
+      } satisfies RankedTrack));
+
+    const toppedUp = appendUniqueRankedTracks(finalTracks, topUpCandidates, 18);
+
+    return {
+      profileSummary: {
+        dominantGenres: queries.slice(0, 5),
+        averageFeatures: {
+          energy: target.energy,
+          valence: target.valence
+        }
+      },
+      tracks: toppedUp
+    };
+  }
+
   if (!finalTracks.length) {
     const languageRescue =
       isLanguageLocked(context.languagePreference)
@@ -692,6 +786,28 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
         }
       }))
     };
+  }
+
+  if (finalTracks.length < MIN_TARGET_BATCH) {
+    const knownPoolTopUp = await buildKnownPoolRescueTracks(
+      source,
+      context,
+      target,
+      dailySalt,
+      [...(context.excludeTrackIds || []), ...finalTracks.map((track) => track.id)]
+    );
+
+    const toppedUp = appendUniqueRankedTracks(finalTracks, knownPoolTopUp, 18);
+
+    if (toppedUp.length > finalTracks.length) {
+      return {
+        profileSummary: {
+          dominantGenres: profile.dominantGenres,
+          averageFeatures: profile.averageFeatures
+        },
+        tracks: toppedUp
+      };
+    }
   }
 
   return {
@@ -1179,7 +1295,13 @@ export async function generateDailyRecommendations(context: ContextInput) {
   }
 
   if (!finalTracks.length) {
-    const knownPoolRescue = await buildKnownPoolRescueTracks(source, context, target, dailySalt);
+    const knownPoolRescue = await buildKnownPoolRescueTracks(
+      source,
+      context,
+      target,
+      dailySalt,
+      context.excludeTrackIds || []
+    );
 
     if (knownPoolRescue.length) {
       return {
@@ -1269,12 +1391,14 @@ export async function generateDailyRecommendations(context: ContextInput) {
         }
       }));
 
+    const emergencyRanked = emergencyTracks;
+
     return {
       profileSummary: {
         dominantGenres: profile.dominantGenres,
         averageFeatures: profile.averageFeatures
       },
-      tracks: emergencyTracks
+      tracks: emergencyRanked
     };
   }
 
