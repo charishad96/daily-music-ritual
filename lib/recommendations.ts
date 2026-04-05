@@ -545,6 +545,22 @@ function externalSourceFlavor(context: ContextInput) {
   };
 }
 
+function guaranteedFallbackQueries(context: ContextInput, seed: string) {
+  const broadPool = [
+    `${context.mood} ${context.energyLevel}`,
+    `${context.mood} discovery`,
+    `${context.energyLevel} energy discovery`,
+    `${context.mood} alternative`,
+    `${context.mood} leftfield`,
+    ...DISCOVERY_WORLD_VOCAB[context.mood].slice(0, 6),
+    ...ENERGY_DISCOVERY_VOCAB[context.energyLevel].map((hint) => `${context.mood} ${hint}`),
+    ...contextOnlySearchQueries(context, `${seed}:base`),
+    ...externalSourceSearchQueries(context, [], `${seed}:external`)
+  ];
+
+  return pickSeededStrings(broadPool, 12, `${seed}:guaranteed-fallback`);
+}
+
 function buildFamiliaritySets(source: ProfileSource) {
   return {
     topTrackIds: new Set(source.topTracks.map((track) => track.id)),
@@ -738,6 +754,24 @@ async function buildSearchTopUpTracks(
         detail: detail || flavor.detail
       }
     } satisfies RankedTrack));
+}
+
+async function buildGuaranteedFallbackTracks(
+  context: ContextInput,
+  excludeTrackIds: string[],
+  dailySalt: string
+) {
+  const queries = guaranteedFallbackQueries(context, dailySalt);
+  const fallbackTracks = await buildSearchTopUpTracks(
+    queries,
+    context,
+    excludeTrackIds,
+    `${dailySalt}:guaranteed`,
+    "Fresh pull",
+    "This batch widened all the way out so you still get a real set to play with."
+  );
+
+  return finalizeRankedTracks(fallbackTracks, 18, normalize(context.familiarity, 0, 100));
 }
 
 function appendUniqueRankedTracks(
@@ -948,6 +982,27 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
       widenedQueries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
     );
     const widenedTracks = enforceLanguagePreference(uniqueTracks(widenedSearchGroups.flat()), context.languagePreference).slice(0, 24);
+
+    if (!widenedTracks.length) {
+      const guaranteedFallback = await buildGuaranteedFallbackTracks(
+        context,
+        context.excludeTrackIds || [],
+        `${dailySalt}:context-guaranteed`
+      );
+
+      if (guaranteedFallback.length) {
+        return {
+          profileSummary: {
+            dominantGenres: queries.slice(0, 5),
+            averageFeatures: {
+              energy: target.energy,
+              valence: target.valence
+            }
+          },
+          tracks: guaranteedFallback
+        };
+      }
+    }
 
     return {
       profileSummary: {
@@ -1538,6 +1593,42 @@ export async function generateDailyRecommendations(context: ContextInput) {
       }));
 
     const emergencyRanked = emergencyTracks;
+
+    if (!emergencyRanked.length) {
+      const guaranteedFallback = await buildGuaranteedFallbackTracks(
+        context,
+        context.excludeTrackIds || [],
+        `${dailySalt}:profile-guaranteed`
+      );
+
+      if (guaranteedFallback.length) {
+        return {
+          profileSummary: {
+            dominantGenres: profile.dominantGenres,
+            averageFeatures: profile.averageFeatures
+          },
+          tracks: guaranteedFallback
+        };
+      }
+
+      const absoluteKnownPool = await buildKnownPoolRescueTracks(
+        source,
+        { ...context, familiarity: Math.max(context.familiarity, 78) },
+        target,
+        `${dailySalt}:absolute-known-pool`,
+        context.excludeTrackIds || []
+      );
+
+      if (absoluteKnownPool.length) {
+        return {
+          profileSummary: {
+            dominantGenres: profile.dominantGenres,
+            averageFeatures: profile.averageFeatures
+          },
+          tracks: finalizeRankedTracks(absoluteKnownPool, 18, 0.78)
+        };
+      }
+    }
 
     return {
       profileSummary: {
