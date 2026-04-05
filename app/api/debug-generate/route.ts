@@ -8,9 +8,7 @@ export async function GET() {
   try {
     const data = await generateDailyRecommendations({
       mood: "focused",
-      timeOfDay: "morning",
       energyLevel: "medium",
-      decadePreference: "any",
       languagePreference: "any",
       familiarity: 38,
       playlistIds: [],
