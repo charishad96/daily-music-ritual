@@ -12,7 +12,7 @@ async function fallbackOnSpotifyReadError<T>(work: () => Promise<T>, fallback: T
   try {
     return await work();
   } catch (error) {
-    if (error instanceof SpotifyApiError && (error.status === 401 || error.status === 403)) {
+    if (error instanceof SpotifyApiError && (error.status === 401 || error.status === 403 || error.status === 429)) {
       return fallback;
     }
 
@@ -35,6 +35,7 @@ export async function GET() {
     }
 
     let restricted = false;
+    let rateLimited = false;
     let profile = null;
 
     try {
@@ -42,6 +43,8 @@ export async function GET() {
     } catch (error) {
       if (error instanceof SpotifyApiError && error.status === 403) {
         restricted = true;
+      } else if (error instanceof SpotifyApiError && error.status === 429) {
+        rateLimited = true;
       } else if (error instanceof SpotifyApiError && error.status === 401) {
         return NextResponse.json({
           authenticated: false,
@@ -52,11 +55,12 @@ export async function GET() {
       }
     }
 
-    const playlists = restricted ? [] : await fallbackOnSpotifyReadError(() => getCurrentUserPlaylists(), []);
+    const playlists = restricted || rateLimited ? [] : await fallbackOnSpotifyReadError(() => getCurrentUserPlaylists(), []);
 
     return NextResponse.json({
       authenticated: true,
       restricted,
+      rateLimited,
       restrictionReason: restricted ? SPOTIFY_RESTRICTED_MESSAGE : undefined,
       profile,
       playlists: playlists.map((playlist) => ({
@@ -100,6 +104,17 @@ export async function POST(request: Request) {
           },
           {
             status: 403
+          }
+        );
+      }
+
+      if (error instanceof SpotifyApiError && error.status === 429) {
+        return NextResponse.json(
+          {
+            error: "Spotify is rate-limiting profile reads right now. Wait a moment, then try again."
+          },
+          {
+            status: 429
           }
         );
       }
