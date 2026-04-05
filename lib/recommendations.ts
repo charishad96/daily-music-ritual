@@ -663,6 +663,34 @@ async function buildSearchTopUpTracks(
     } satisfies RankedTrack));
 }
 
+async function buildGuaranteedFallbackTracks(
+  context: ContextInput,
+  excludeTrackIds: string[],
+  dailySalt: string
+) {
+  const broadQueries = pickSeededStrings(
+    [
+      ...contextOnlySearchQueries(context, `${dailySalt}:context-base`),
+      ...externalSourceSearchQueries(context, [], `${dailySalt}:external-base`),
+      `${context.mood} ${context.energyLevel}`,
+      `${context.mood} discovery`,
+      `${context.energyLevel} energy`,
+      `${context.mood} alternative`
+    ],
+    10,
+    `${dailySalt}:guaranteed`
+  );
+
+  return buildSearchTopUpTracks(
+    broadQueries,
+    context,
+    excludeTrackIds,
+    `${dailySalt}:guaranteed-topup`,
+    "Fresh pull",
+    "This one came from the widest clean search lane so the batch still has something strong to play."
+  );
+}
+
 function appendUniqueRankedTracks(
   base: RankedTrack[],
   additions: RankedTrack[],
@@ -1486,6 +1514,24 @@ export async function generateDailyRecommendations(context: ContextInput) {
       }));
 
     const emergencyRanked = emergencyTracks;
+
+    if (!emergencyRanked.length) {
+      const guaranteedFallback = await buildGuaranteedFallbackTracks(
+        context,
+        [...(context.excludeTrackIds || []), ...profile.excludedTrackIds],
+        `${dailySalt}:final-rescue`
+      );
+
+      if (guaranteedFallback.length) {
+        return {
+          profileSummary: {
+            dominantGenres: profile.dominantGenres,
+            averageFeatures: profile.averageFeatures
+          },
+          tracks: finalizeRankedTracks(guaranteedFallback, 18, safety)
+        };
+      }
+    }
 
     return {
       profileSummary: {
