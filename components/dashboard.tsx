@@ -372,7 +372,7 @@ export function Dashboard() {
                 tracks.map((track, index) => <TrackCard key={track.id} track={track} index={index} />)
               ) : (
                 <div className="glass rounded-[2rem] border border-white/70 p-8 text-center text-sm leading-6 text-ink/62">
-                  Pull a batch to get 20 to 24 recommendations with a short explanation for each pick.
+                  Pull a batch to get 20 to 24 recommendations.
                 </div>
               )}
             </div>
@@ -443,13 +443,6 @@ function TrackCard({ track, index }: { track: RankedTrack; index: number }) {
             <h3 className="text-2xl text-dusk">{track.name}</h3>
           </div>
           <p className="mt-1 text-sm text-ink/68">{track.artists.map((artist) => artist.name).join(", ")}</p>
-          <p className="mt-3 text-sm font-semibold text-dusk">{track.reason.headline}</p>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-ink/65">{track.reason.detail}</p>
-          <div className="mt-4 flex flex-wrap gap-3 text-xs uppercase tracking-[0.16em] text-ink/45">
-            <span>Similarity {Math.round(track.similarity * 100)}</span>
-            <span>Context {Math.round(track.contextFit * 100)}</span>
-            <span>Popularity {track.popularity}</span>
-          </div>
         </div>
 
         <div className="overflow-hidden rounded-[1.3rem] border border-dusk/10 bg-white">
