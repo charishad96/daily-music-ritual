@@ -161,9 +161,9 @@ export function Dashboard() {
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-4 md:gap-6 xl:items-end">
+          <div className="flex w-full flex-col items-center gap-4 md:gap-6 xl:items-end">
             <VinylDisplay />
-            <div className="glass w-full max-w-[420px] rounded-[1.5rem] border border-white/70 px-4 py-4 text-sm text-ink/70 md:rounded-[1.7rem] md:px-5 md:py-5">
+            <div className="glass w-full rounded-[1.5rem] border border-white/70 px-4 py-4 text-sm text-ink/70 md:max-w-[420px] md:rounded-[1.7rem] md:px-5 md:py-5">
               <div className="text-xs uppercase tracking-[0.24em] text-dusk/60">{formatDateLabel()}</div>
               <div className="mt-3 text-xl font-semibold text-dusk md:text-2xl">
                 {bootstrap?.restricted ? "Spotify account access blocked" : bootstrap?.authenticated ? "Ready to generate" : "Connect Spotify first"}
@@ -372,7 +372,7 @@ export function Dashboard() {
 
 function VinylDisplay() {
   return (
-    <div className="relative flex h-[240px] w-full max-w-[420px] items-center justify-center overflow-hidden rounded-[1.7rem] border border-white/70 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.96),rgba(244,238,228,0.88)_55%,rgba(227,215,196,0.65))] shadow-halo sm:h-[280px] md:h-[320px] md:rounded-[2rem]">
+    <div className="relative flex h-[210px] w-full items-center justify-center overflow-hidden rounded-[1.7rem] border border-white/70 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.96),rgba(244,238,228,0.88)_55%,rgba(227,215,196,0.65))] shadow-halo sm:h-[260px] md:h-[320px] md:max-w-[420px] md:rounded-[2rem]">
       <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.2),transparent_40%,rgba(27,52,66,0.08))]" />
       <div className="vinyl-record">
         <div className="vinyl-rings" />
@@ -388,21 +388,31 @@ function VinylDisplay() {
 }
 
 function SourceMarquee() {
-  const items = [...sourceWorlds, ...sourceWorlds];
-
   return (
-    <div className="source-marquee rounded-[1.2rem] border border-dusk/10 bg-white/62 py-2.5 md:rounded-[1.5rem] md:py-3">
-      <div className="source-marquee-track">
-        {items.map((item, index) => (
+    <>
+      <div className="flex flex-wrap gap-2 rounded-[1.2rem] border border-dusk/10 bg-white/62 p-3 md:hidden">
+        {sourceWorlds.map((item) => (
           <span
-            key={`${item}-${index}`}
-            className="inline-flex items-center rounded-full border border-dusk/10 bg-white px-3 py-2 text-[0.66rem] uppercase tracking-[0.18em] text-dusk/72 shadow-[0_8px_24px_rgba(22,31,34,0.06)] md:px-4 md:text-[0.72rem] md:tracking-[0.2em]"
+            key={item}
+            className="inline-flex items-center rounded-full border border-dusk/10 bg-white px-3 py-2 text-[0.62rem] uppercase tracking-[0.16em] text-dusk/72 shadow-[0_8px_24px_rgba(22,31,34,0.06)]"
           >
             {item}
           </span>
         ))}
       </div>
-    </div>
+      <div className="source-marquee hidden rounded-[1.5rem] border border-dusk/10 bg-white/62 py-3 md:block">
+        <div className="source-marquee-track">
+          {[...sourceWorlds, ...sourceWorlds].map((item, index) => (
+            <span
+              key={`${item}-${index}`}
+              className="inline-flex items-center rounded-full border border-dusk/10 bg-white px-4 py-2 text-[0.72rem] uppercase tracking-[0.2em] text-dusk/72 shadow-[0_8px_24px_rgba(22,31,34,0.06)]"
+            >
+              {item}
+            </span>
+          ))}
+        </div>
+      </div>
+    </>
   );
 }
 
