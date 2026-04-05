@@ -18,16 +18,16 @@ const defaultContext: ContextInput = {
 const moods = ["calm", "focused", "energetic", "melancholic", "social"] as const;
 const energyLevels = ["low", "medium", "high"] as const;
 const sourceWorlds = [
-  "Bandcamp Daily",
-  "NTS",
-  "Resident Advisor",
-  "KEXP",
-  "Worldwide FM",
-  "The Line of Best Fit",
-  "The Lot Radio",
-  "Le Mellotron",
-  "In Sheep's Clothing",
-  "Godfather, Tokyo"
+  { name: "Bandcamp Daily", mark: "BC", url: "https://daily.bandcamp.com/" },
+  { name: "NTS", mark: "NTS", url: "https://www.nts.live/" },
+  { name: "Resident Advisor", mark: "RA", url: "https://ra.co/about" },
+  { name: "KEXP", mark: "KEXP", url: "https://www.kexp.org/new/" },
+  { name: "Worldwide FM", mark: "WFM", url: "https://worldwidefm.net/about/" },
+  { name: "The Line of Best Fit", mark: "LBF", url: "https://www.thelineofbestfit.com/" },
+  { name: "The Lot Radio", mark: "LOT", url: "https://www.thelotradio.com/about" },
+  { name: "Le Mellotron", mark: "LM", url: "https://www.lemellotron.com/" },
+  { name: "In Sheep's Clothing", mark: "ISC", url: "https://insheepsclothinghifi.com/" },
+  { name: "Kissa Kissa", mark: "KK", url: "https://www.kissakissa.us/" }
 ] as const;
 
 export function Dashboard() {
@@ -392,23 +392,35 @@ function SourceMarquee() {
     <>
       <div className="flex flex-wrap gap-2 rounded-[1.2rem] border border-dusk/10 bg-white/62 p-3 md:hidden">
         {sourceWorlds.map((item) => (
-          <span
-            key={item}
-            className="inline-flex items-center rounded-full border border-dusk/10 bg-white px-3 py-2 text-[0.62rem] uppercase tracking-[0.16em] text-dusk/72 shadow-[0_8px_24px_rgba(22,31,34,0.06)]"
+          <a
+            key={item.name}
+            href={item.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-full border border-dusk/10 bg-white px-3 py-2 text-[0.62rem] uppercase tracking-[0.16em] text-dusk/72 shadow-[0_8px_24px_rgba(22,31,34,0.06)] transition hover:border-dusk/22 hover:bg-white/90"
           >
-            {item}
-          </span>
+            <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-dusk text-[0.58rem] font-semibold tracking-[0.08em] text-white">
+              {item.mark}
+            </span>
+            <span>{item.name}</span>
+          </a>
         ))}
       </div>
       <div className="source-marquee hidden rounded-[1.5rem] border border-dusk/10 bg-white/62 py-3 md:block">
         <div className="source-marquee-track">
           {[...sourceWorlds, ...sourceWorlds].map((item, index) => (
-            <span
-              key={`${item}-${index}`}
-              className="inline-flex items-center rounded-full border border-dusk/10 bg-white px-4 py-2 text-[0.72rem] uppercase tracking-[0.2em] text-dusk/72 shadow-[0_8px_24px_rgba(22,31,34,0.06)]"
+            <a
+              key={`${item.name}-${index}`}
+              href={item.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border border-dusk/10 bg-white px-4 py-2 text-[0.72rem] uppercase tracking-[0.2em] text-dusk/72 shadow-[0_8px_24px_rgba(22,31,34,0.06)] transition hover:border-dusk/22 hover:bg-white/90"
             >
-              {item}
-            </span>
+              <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-dusk text-[0.58rem] font-semibold tracking-[0.08em] text-white">
+                {item.mark}
+              </span>
+              <span>{item.name}</span>
+            </a>
           ))}
         </div>
       </div>
