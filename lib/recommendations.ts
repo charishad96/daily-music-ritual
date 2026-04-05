@@ -86,83 +86,27 @@ const LANGUAGE_LABELS: Record<ContextInput["languagePreference"], string> = {
 const MIN_LANGUAGE_BATCH = 5;
 const MIN_TARGET_BATCH = 12;
 
-const DISCOVERY_WORLD_VOCAB: Record<ContextInput["mood"], string[]> = {
-  calm: [
-    "ambient",
-    "dream pop",
-    "modern classical",
-    "balearic",
-    "ambient jazz",
-    "library music",
-    "fourth world",
-    "spiritual jazz",
-    "ECM jazz",
-    "listening bar",
-    "late night kissa",
-    "cinematic ambient"
-  ],
-  focused: [
-    "minimal electronic",
-    "leftfield instrumental",
-    "dub techno",
-    "motorik",
-    "instrumental electronic",
-    "library music",
-    "modular ambient",
-    "minimal soundtrack",
-    "post classical",
-    "electronica",
-    "kissa instrumental",
-    "deep concentration"
-  ],
-  energetic: [
-    "leftfield disco",
-    "dance punk",
-    "cosmic disco",
-    "broken beat",
-    "post punk dance",
-    "indie sleaze",
-    "electroclash",
-    "festival oddities",
-    "club edit",
-    "body music",
-    "adrenaline soundtrack",
-    "warehouse indie"
-  ],
-  melancholic: [
-    "slowcore",
-    "chamber pop",
-    "romantic drama soundtrack",
-    "arthouse soundtrack",
-    "sad indie",
-    "minimal folk",
-    "mourning pop",
-    "cinematic indie",
-    "gloom pop",
-    "heartbreak soul",
-    "night bus music",
-    "after hours ballad"
-  ],
-  social: [
-    "indie soul",
-    "nu disco",
-    "world groove",
-    "party soundtrack",
-    "boogie",
-    "funk oddities",
-    "sunset groove",
-    "dancefloor soul",
-    "balearic house",
-    "global groove",
-    "radio disco",
-    "warm movers"
-  ]
-};
-
-const ENERGY_DISCOVERY_VOCAB: Record<ContextInput["energyLevel"], string[]> = {
-  low: ["soft", "intimate", "slow burn", "headphones", "dim lights", "stillness"],
-  medium: ["midtempo", "warm", "moody", "glide", "steady pulse", "late evening"],
-  high: ["upbeat", "driving", "sweaty", "fast lane", "club", "full tilt"]
+const EXTERNAL_SOURCE_WORLDS: Record<ContextInput["mood"], { bandcamp: string[]; soundtrack: string[] }> = {
+  calm: {
+    bandcamp: ["ambient bandcamp", "dream pop bandcamp", "modern classical bandcamp"],
+    soundtrack: ["cinematic ambient", "library music", "film score mood"]
+  },
+  focused: {
+    bandcamp: ["instrumental electronic bandcamp", "minimal electronic bandcamp", "leftfield instrumental"],
+    soundtrack: ["minimal soundtrack", "instrumental score", "tension soundtrack"]
+  },
+  energetic: {
+    bandcamp: ["dance punk bandcamp", "leftfield disco bandcamp", "post punk dance"],
+    soundtrack: ["adrenaline soundtrack", "action soundtrack electronic", "chase scene soundtrack"]
+  },
+  melancholic: {
+    bandcamp: ["slowcore bandcamp", "chamber pop bandcamp", "indie folk bandcamp"],
+    soundtrack: ["melancholic soundtrack", "cinematic indie", "romantic drama soundtrack"]
+  },
+  social: {
+    bandcamp: ["nu disco bandcamp", "indie soul bandcamp", "world groove bandcamp"],
+    soundtrack: ["party soundtrack", "funk soundtrack", "late night groove soundtrack"]
+  }
 };
 
 const LANGUAGE_LEXICAL_SEEDS: Record<Exclude<ContextInput["languagePreference"], "any">, string[]> = {
@@ -216,17 +160,6 @@ function textContainsLatinDiacritics(text: string) {
 
 function textIncludesAny(text: string, tokens: string[]) {
   return tokens.some((token) => text.includes(token));
-}
-
-function pickSeededStrings(items: string[], count: number, seed: string) {
-  return uniqueBy(items, (item) => normalizeComparableText(item))
-    .map((item) => ({
-      item,
-      weight: seededValue(`${seed}:${normalizeComparableText(item)}`)
-    }))
-    .sort((left, right) => right.weight - left.weight)
-    .slice(0, count)
-    .map(({ item }) => item);
 }
 
 function normalizedLanguageText(track: SpotifyTrack) {
@@ -462,71 +395,61 @@ async function searchLanguageRescueTracks(
   return soft;
 }
 
-function contextOnlySearchQueries(context: ContextInput, seed: string) {
-  const moodBase =
+function contextOnlySearchQueries(context: ContextInput) {
+  return [
     context.mood === "focused"
-      ? ["instrumental indie electronic", "minimal electronica", "deep focus"]
+      ? "instrumental indie electronic"
       : context.mood === "calm"
-        ? ["ambient folk dream pop", "soft atmospheric", "morning drift"]
+        ? "ambient folk dream pop"
         : context.mood === "energetic"
-          ? ["indie dance alternative", "leftfield movers", "festival warmup"]
-          : context.mood === "melancholic"
-            ? ["art pop slowcore", "cinematic sadness", "night drive melancholy"]
-            : ["nu disco indie soul", "late night groove", "social warmup"];
-
-  const languagePool =
-    context.languagePreference === "greek"
+          ? "indie dance alternative"
+        : context.mood === "melancholic"
+            ? "art pop slowcore"
+            : "nu disco indie soul",
+    context.energyLevel === "high"
+      ? "upbeat alternative"
+      : context.energyLevel === "low"
+        ? "soft atmospheric"
+        : "midtempo discovery",
+    ...LANGUAGE_QUERY_HINTS[context.languagePreference],
+    ...(context.languagePreference === "greek"
       ? ["greek singer songwriter", "athens indie"]
       : context.languagePreference === "spanish"
         ? ["latin singer songwriter", "indie latino"]
         : context.languagePreference === "portuguese"
           ? ["brazilian singer songwriter", "indie brasileiro"]
-          : LANGUAGE_QUERY_HINTS[context.languagePreference];
-
-  const pool = [
-    ...moodBase,
-    ...DISCOVERY_WORLD_VOCAB[context.mood].slice(0, 5),
-    ...ENERGY_DISCOVERY_VOCAB[context.energyLevel].map((hint) => `${context.mood} ${hint}`),
-    ...languagePool
-  ];
-
-  return pickSeededStrings(pool, 6, `${seed}:context-only`);
+          : [])
+  ].filter(Boolean) as string[];
 }
 
-function externalSourceSearchQueries(context: ContextInput, genreHints: string[] = [], seed = "") {
-  const sourceFlavors = [
-    "bandcamp",
-    "nts",
-    "resident advisor",
-    "kexp",
-    "worldwide fm",
-    "line of best fit",
-    "lot radio",
-    "le mellotron",
-    "in sheep's clothing",
-    "jazz kissa",
-    "music supervision",
-    "film soundtrack"
-  ];
+function externalSourceSearchQueries(context: ContextInput, genreHints: string[] = []) {
+  const worlds = EXTERNAL_SOURCE_WORLDS[context.mood];
+  const energyHints =
+    context.energyLevel === "high"
+      ? ["high energy", "club", "driving"]
+      : context.energyLevel === "low"
+        ? ["soft", "slow", "intimate"]
+        : ["midtempo", "warm", "moody"];
 
-  const moodPool = DISCOVERY_WORLD_VOCAB[context.mood];
-  const energyPool = ENERGY_DISCOVERY_VOCAB[context.energyLevel];
-
-  const pool = [
-    ...genreHints.slice(0, 3).flatMap((genre) => [
-      `${genre} ${context.mood}`,
-      `${genre} ${context.energyLevel}`,
-      `${genre} ${energyPool[0]}`
-    ]),
-    ...moodPool,
-    ...energyPool.map((hint) => `${context.mood} ${hint}`),
-    ...moodPool.flatMap((term, index) => sourceFlavors.slice(index % 3, (index % 3) + 2).map((source) => `${source} ${term}`)),
-    ...sourceFlavors.slice(0, 6).map((source) => `${source} ${context.mood}`),
-    ...sourceFlavors.slice(4).map((source) => `${source} ${context.energyLevel}`),
-    ...LANGUAGE_QUERY_HINTS[context.languagePreference]
-  ];
-
-  return pickSeededStrings(pool, 9, `${seed}:${context.mood}:${context.energyLevel}`);
+  return uniqueBy(
+    [
+      ...genreHints.slice(0, 2).map((genre) => `${genre} ${context.mood}`),
+      ...worlds.bandcamp,
+      ...worlds.soundtrack,
+      ...energyHints.map((hint) => `${context.mood} ${hint}`),
+      context.mood === "energetic"
+        ? "festival oddities"
+        : context.mood === "calm"
+          ? "listening bar morning"
+          : context.mood === "focused"
+            ? "listening bar instrumental"
+            : context.mood === "melancholic"
+              ? "arthouse soundtrack"
+              : "late night listening bar",
+      ...LANGUAGE_QUERY_HINTS[context.languagePreference]
+    ].filter(Boolean) as string[],
+    (query) => normalizeComparableText(query)
+  ).slice(0, 7);
 }
 
 function externalSourceFlavor(context: ContextInput) {
@@ -543,22 +466,6 @@ function externalSourceFlavor(context: ContextInput) {
     detail: "This widens the batch through more leftfield editorial and indie-digging cues instead of default Spotify graph loops.",
     pathLabel: "leftfield editorial and indie-digging cues"
   };
-}
-
-function guaranteedFallbackQueries(context: ContextInput, seed: string) {
-  const broadPool = [
-    `${context.mood} ${context.energyLevel}`,
-    `${context.mood} discovery`,
-    `${context.energyLevel} energy discovery`,
-    `${context.mood} alternative`,
-    `${context.mood} leftfield`,
-    ...DISCOVERY_WORLD_VOCAB[context.mood].slice(0, 6),
-    ...ENERGY_DISCOVERY_VOCAB[context.energyLevel].map((hint) => `${context.mood} ${hint}`),
-    ...contextOnlySearchQueries(context, `${seed}:base`),
-    ...externalSourceSearchQueries(context, [], `${seed}:external`)
-  ];
-
-  return pickSeededStrings(broadPool, 12, `${seed}:guaranteed-fallback`);
 }
 
 function buildFamiliaritySets(source: ProfileSource) {
@@ -651,7 +558,7 @@ async function buildSafeRecallTracks(
         contextFit,
         reason: {
           headline: "Comfort-zone anchor",
-          detail: "A proven favorite-zone pick that fits this mood without making you work for it."
+          detail: `This is a highly familiar-feeling pick pulled closer to your known listening so the batch can feel safer and more immediately rewarding.`
         }
       } satisfies RankedTrack;
     })
@@ -719,7 +626,7 @@ async function buildKnownPoolRescueTracks(
         contextFit,
         reason: {
           headline: "Known-pool rescue",
-          detail: "Spotify ran thin here, so this one came from the deeper part of your own taste."
+          detail: "Spotify search came back too thin, so this batch falls back to stronger matches from your own broader listening pool."
         }
       } satisfies RankedTrack;
     })
@@ -754,24 +661,6 @@ async function buildSearchTopUpTracks(
         detail: detail || flavor.detail
       }
     } satisfies RankedTrack));
-}
-
-async function buildGuaranteedFallbackTracks(
-  context: ContextInput,
-  excludeTrackIds: string[],
-  dailySalt: string
-) {
-  const queries = guaranteedFallbackQueries(context, dailySalt);
-  const fallbackTracks = await buildSearchTopUpTracks(
-    queries,
-    context,
-    excludeTrackIds,
-    `${dailySalt}:guaranteed`,
-    "Fresh pull",
-    "This batch widened all the way out so you still get a real set to play with."
-  );
-
-  return finalizeRankedTracks(fallbackTracks, 18, normalize(context.familiarity, 0, 100));
 }
 
 function appendUniqueRankedTracks(
@@ -832,7 +721,7 @@ function finalizeRankedTracks(
 
 async function buildContextOnlyRecommendations(context: ContextInput) {
   const dailySalt = `${new Date().toISOString().slice(0, 10)}:${context.refreshKey || "0"}`;
-  const queries = contextOnlySearchQueries(context, dailySalt);
+  const queries = contextOnlySearchQueries(context);
   const lockedTracks = await searchLanguageLockedTracks(context);
   const rescuedLockedTracks =
     isLanguageLocked(context.languagePreference) && lockedTracks.length < MIN_LANGUAGE_BATCH
@@ -886,9 +775,9 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
         contextFit,
         reason: {
           headline: "Light-profile discovery mode",
-          detail: `Spotify gave us very little history, so this pick leans on your ${context.mood} / ${context.energyLevel} energy vibe${
+          detail: `Spotify gave very little taste history, so this batch leans on your ${context.mood} / ${context.energyLevel} energy vibe${
             context.languagePreference !== "any" ? ` with a ${LANGUAGE_LABELS[context.languagePreference].toLowerCase()} bias` : ""
-          } and still tries to surprise you.`
+          } while still trying to stay fresh.`
         }
       } satisfies RankedTrack;
     })
@@ -926,7 +815,7 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
 
   if (finalTracks.length > 0 && finalTracks.length < MIN_TARGET_BATCH) {
     const topUpCandidates = await buildSearchTopUpTracks(
-      externalSourceSearchQueries(context, queries.slice(0, 2), `${dailySalt}:context-topup-pool`),
+      externalSourceSearchQueries(context, queries.slice(0, 2)),
       context,
       [...(context.excludeTrackIds || []), ...finalTracks.map((existing) => existing.id)],
       `${dailySalt}:context-topup`
@@ -969,40 +858,19 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
           contextFit: 0.52,
           reason: {
             headline: `${LANGUAGE_LABELS[context.languagePreference]} rescue`,
-            detail: `Language stayed strict here, so this came from the strongest ${LANGUAGE_LABELS[
+            detail: `Your selected language was kept strict, so this smaller batch pulls only from stronger ${LANGUAGE_LABELS[
               context.languagePreference
-            ].toLowerCase()} matches we could actually stand behind.`
+            ].toLowerCase()} matches.`
           }
         }))
       };
     }
 
-    const widenedQueries = externalSourceSearchQueries(context, queries.slice(0, 2), `${dailySalt}:context-widened`);
+    const widenedQueries = externalSourceSearchQueries(context, queries.slice(0, 2));
     const widenedSearchGroups = await Promise.all(
       widenedQueries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
     );
     const widenedTracks = enforceLanguagePreference(uniqueTracks(widenedSearchGroups.flat()), context.languagePreference).slice(0, 24);
-
-    if (!widenedTracks.length) {
-      const guaranteedFallback = await buildGuaranteedFallbackTracks(
-        context,
-        context.excludeTrackIds || [],
-        `${dailySalt}:context-guaranteed`
-      );
-
-      if (guaranteedFallback.length) {
-        return {
-          profileSummary: {
-            dominantGenres: queries.slice(0, 5),
-            averageFeatures: {
-              energy: target.energy,
-              valence: target.valence
-            }
-          },
-          tracks: guaranteedFallback
-        };
-      }
-    }
 
     return {
       profileSummary: {
@@ -1021,7 +889,7 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
           contextFit: 0.44,
           reason: {
             headline: externalSourceFlavor(context).headline,
-            detail: `Your first pass came back thin, so this one widens out through ${externalSourceFlavor(context).pathLabel} instead of the usual Spotify loop.`
+            detail: `Your profile was too sparse for a strong first pass, so this batch widens through ${externalSourceFlavor(context).pathLabel} instead of default Spotify loops.`
           }
         })),
         18,
@@ -1031,7 +899,18 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
   }
 
   if (finalTracks.length < MIN_TARGET_BATCH) {
-    const topUpQueries = externalSourceSearchQueries(context, queries.slice(0, 2), `${dailySalt}:context-small-topup`);
+    const topUpQueries = [
+      context.mood === "calm"
+        ? "ambient"
+        : context.mood === "focused"
+          ? "instrumental electronic"
+          : context.mood === "energetic"
+            ? "indie dance"
+            : context.mood === "melancholic"
+              ? "slowcore"
+              : "indie soul",
+      context.energyLevel === "high" ? "upbeat" : context.energyLevel === "low" ? "soft" : "midtempo"
+    ];
     const topUpSearchGroups = await Promise.all(
       topUpQueries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
     );
@@ -1046,7 +925,7 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
         contextFit: 0.44,
         reason: {
           headline: "Top-up discovery",
-          detail: "The first pass was too thin, so this slipped in to keep the batch alive and interesting."
+          detail: "The first pass was too thin, so this batch was widened slightly to keep it fresh and usable."
         }
       } satisfies RankedTrack));
 
@@ -1298,20 +1177,38 @@ async function expandCandidates(
     relatedArtists.slice(0, 10).map((artist) => swallowSpotify403(() => getArtistTopTracks(artist.id), []))
   );
 
+  const decadeQuery = "";
+
   const genreSearchGroups = await Promise.all(
     profile.dominantGenres
       .slice(0, 3)
-      .map((genre) => swallowSpotify403(() => searchTracks(`genre:"${genre}"`, 10), []))
+      .map((genre) => swallowSpotify403(() => searchTracks(`genre:"${genre}"${decadeQuery}`, 18), []))
   );
 
-  const broadFallbackQueries = externalSourceSearchQueries(
-    context,
-    profile.dominantGenres.slice(0, 3),
-    `${new Date().toISOString().slice(0, 10)}:${context.refreshKey || "0"}:broad-fallback`
-  );
+  const broadFallbackQueries = [
+    profile.dominantGenres[0],
+    profile.dominantGenres[1],
+    context.mood === "focused"
+      ? "indie alternative"
+      : context.mood === "calm"
+      ? "dream pop"
+        : context.mood === "energetic"
+          ? "indie dance"
+          : context.mood === "melancholic"
+            ? "art pop"
+            : "nu disco",
+    context.energyLevel === "high"
+      ? "high energy"
+      : context.energyLevel === "low"
+        ? "soft chill"
+        : "midtempo",
+    ...LANGUAGE_QUERY_HINTS[context.languagePreference]
+  ]
+    .filter(Boolean)
+    .slice(0, isLanguageLocked(context.languagePreference) ? 4 : 6) as string[];
 
   const broadFallbackSearchGroups = await Promise.all(
-    broadFallbackQueries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
+    broadFallbackQueries.map((query) => swallowSpotify403(() => searchTracks(`${query}${decadeQuery}`, 25), []))
   );
   const languageLockedTracks = await searchLanguageLockedTracks(context);
   const rescuedLanguageLockedTracks =
@@ -1375,28 +1272,28 @@ function explainRecommendation(
 ): RecommendationReason {
   if (novelty > 0.72) {
     return {
-      headline: "Fresh, not random",
-      detail: `A less obvious find that still lands cleanly in your ${context.mood}, ${context.energyLevel}-energy lane.`
+      headline: "Fresh but still aligned",
+      detail: `Less obvious pick with a lower-popularity profile that still matches your ${context.mood}, ${context.energyLevel}-energy lane.`
     };
   }
 
   if (features.energy > 0.72 && context.energyLevel === "high") {
     return {
-      headline: "Instant lift",
-      detail: "All momentum, no drag; this one should hit fast in a higher-energy run."
+      headline: "Built for momentum",
+      detail: "High energy and forward motion make this a strong fit for a more active session."
     };
   }
 
   if (features.acousticness > 0.45 && context.mood === "calm") {
     return {
-      headline: "Soft-focus gem",
-      detail: "It keeps the mood gentle while dodging the obvious songs you already know by heart."
+      headline: "A softer deep cut",
+      detail: "The calmer acoustic lean keeps it close to your taste while avoiding the obvious tracks."
     };
   }
 
   return {
-    headline: profile.dominantGenres[0] ? `Beyond your ${profile.dominantGenres[0]} orbit` : "Taste-adjacent spark",
-    detail: "Close enough to click immediately, different enough to feel like a real find."
+    headline: profile.dominantGenres[0] ? `Extends your ${profile.dominantGenres[0]} orbit` : "Taste-adjacent discovery",
+    detail: "Its feature profile lands near your saved preferences, but the artist overlap stays intentionally light."
   };
 }
 
@@ -1558,11 +1455,7 @@ export async function generateDailyRecommendations(context: ContextInput) {
       };
     }
 
-    const emergencyQueries = externalSourceSearchQueries(
-      context,
-      profile.dominantGenres.slice(0, 2),
-      `${dailySalt}:emergency`
-    );
+    const emergencyQueries = externalSourceSearchQueries(context, profile.dominantGenres.slice(0, 2));
 
     const emergencySearchGroups = await Promise.all(
       emergencyQueries.map((query) => swallowSpotify403(() => searchTracks(query, 30), []))
@@ -1583,52 +1476,16 @@ export async function generateDailyRecommendations(context: ContextInput) {
         novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
         contextFit: 0.48,
         reason: {
-          headline: "Worth the detour",
-          detail: `Your first pass came back thin, so this one was pulled from a wider ${context.mood} lane${
+          headline: "Broader discovery fallback",
+          detail: `Spotify returned a sparse first-pass set, so this pick comes from a wider ${context.mood} discovery search${
             context.languagePreference !== "any"
               ? ` with a ${LANGUAGE_LABELS[context.languagePreference].toLowerCase()} bias`
               : ""
-          } and still felt strong enough to keep.`
+          }.`
         }
       }));
 
     const emergencyRanked = emergencyTracks;
-
-    if (!emergencyRanked.length) {
-      const guaranteedFallback = await buildGuaranteedFallbackTracks(
-        context,
-        context.excludeTrackIds || [],
-        `${dailySalt}:profile-guaranteed`
-      );
-
-      if (guaranteedFallback.length) {
-        return {
-          profileSummary: {
-            dominantGenres: profile.dominantGenres,
-            averageFeatures: profile.averageFeatures
-          },
-          tracks: guaranteedFallback
-        };
-      }
-
-      const absoluteKnownPool = await buildKnownPoolRescueTracks(
-        source,
-        { ...context, familiarity: Math.max(context.familiarity, 78) },
-        target,
-        `${dailySalt}:absolute-known-pool`,
-        context.excludeTrackIds || []
-      );
-
-      if (absoluteKnownPool.length) {
-        return {
-          profileSummary: {
-            dominantGenres: profile.dominantGenres,
-            averageFeatures: profile.averageFeatures
-          },
-          tracks: finalizeRankedTracks(absoluteKnownPool, 18, 0.78)
-        };
-      }
-    }
 
     return {
       profileSummary: {
@@ -1641,7 +1498,7 @@ export async function generateDailyRecommendations(context: ContextInput) {
 
   if (finalTracks.length < MIN_TARGET_BATCH) {
     const searchTopUp = await buildSearchTopUpTracks(
-      externalSourceSearchQueries(context, profile.dominantGenres.slice(0, 2), `${dailySalt}:profile-topup-pool`),
+      externalSourceSearchQueries(context, profile.dominantGenres.slice(0, 2)),
       context,
       [...(context.excludeTrackIds || []), ...finalTracks.map((track) => track.id)],
       `${dailySalt}:topup`
