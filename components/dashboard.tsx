@@ -46,6 +46,7 @@ export function Dashboard() {
   const [isLoading, startLoading] = useTransition();
   const [refreshCount, setRefreshCount] = useState(0);
   const [lastRunContextKey, setLastRunContextKey] = useState<string | null>(null);
+  const [sessionSeed] = useState(() => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
 
   useEffect(() => {
     startBootstrap(async () => {
@@ -75,7 +76,7 @@ export function Dashboard() {
         body: JSON.stringify({
           ...context,
           excludeTrackIds: tracks.map((track) => track.id),
-          refreshKey: String(nextRefreshCount)
+          refreshKey: `${sessionSeed}:${nextRefreshCount}`
         })
       });
 
