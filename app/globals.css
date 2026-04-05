@@ -74,6 +74,36 @@ h3 {
   opacity: 0.55;
 }
 
+.vinyl-accent {
+  position: absolute;
+  border-radius: 9999px;
+  inset: 18px;
+  opacity: 0.95;
+}
+
+.vinyl-accent-one {
+  background:
+    conic-gradient(
+      from 18deg,
+      transparent 0deg 34deg,
+      rgba(198, 131, 66, 0.95) 34deg 62deg,
+      transparent 62deg 360deg
+    );
+  mask: radial-gradient(circle at center, transparent 0 82px, black 82px 100%);
+}
+
+.vinyl-accent-two {
+  inset: 30px;
+  background:
+    conic-gradient(
+      from 210deg,
+      transparent 0deg 24deg,
+      rgba(40, 74, 90, 0.9) 24deg 52deg,
+      transparent 52deg 360deg
+    );
+  mask: radial-gradient(circle at center, transparent 0 62px, black 62px 90%);
+}
+
 .vinyl-label {
   position: absolute;
   inset: 76px;

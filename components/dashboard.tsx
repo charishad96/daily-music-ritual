@@ -131,7 +131,7 @@ export function Dashboard() {
               Daily Music Ritual
             </p>
             <h1 className="max-w-3xl text-[3.2rem] leading-[0.94] text-dusk md:text-[5.3rem]">
-              Beyond the Spotify loop.
+              Break free from the loop.
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-8 text-ink/76 md:text-lg">
               Spotify has the catalogue. What it no longer has, for most of us, is surprise. The same songs come back,
@@ -373,13 +373,12 @@ function VinylDisplay() {
       <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.2),transparent_40%,rgba(27,52,66,0.08))]" />
       <div className="vinyl-record">
         <div className="vinyl-rings" />
+        <div className="vinyl-accent vinyl-accent-one" />
+        <div className="vinyl-accent vinyl-accent-two" />
         <div className="vinyl-label">
           <div className="vinyl-label-inner" />
         </div>
         <div className="vinyl-hole" />
-      </div>
-      <div className="pointer-events-none absolute bottom-6 left-6 rounded-full border border-white/70 bg-white/50 px-4 py-2 text-[0.68rem] uppercase tracking-[0.24em] text-dusk/58 backdrop-blur">
-        Listening-room energy
       </div>
     </div>
   );
