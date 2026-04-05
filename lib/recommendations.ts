@@ -407,6 +407,38 @@ function buildFamiliaritySets(source: ProfileSource) {
   };
 }
 
+function familiarTrackFitsContext(
+  features: AudioFeatures,
+  context: ContextInput,
+  target: AudioFeatures
+) {
+  if (context.energyLevel === "low" && (features.energy > target.energy + 0.16 || features.tempo > 116)) {
+    return false;
+  }
+
+  if (context.energyLevel === "high" && features.energy < target.energy - 0.2) {
+    return false;
+  }
+
+  if (context.mood === "calm" && (features.energy > 0.58 || features.tempo > 118 || features.danceability > 0.72)) {
+    return false;
+  }
+
+  if (context.mood === "focused" && features.energy > 0.76 && features.danceability > 0.74) {
+    return false;
+  }
+
+  if (context.mood === "melancholic" && features.valence > target.valence + 0.24) {
+    return false;
+  }
+
+  if (context.mood === "social" && features.energy < target.energy - 0.18) {
+    return false;
+  }
+
+  return true;
+}
+
 async function buildSafeRecallTracks(
   source: ProfileSource,
   profile: TasteProfile,
@@ -428,6 +460,7 @@ async function buildSafeRecallTracks(
   const safety = normalize(context.familiarity, 0, 100);
 
   return familiarPool
+    .filter((track) => familiarTrackFitsContext(audioFeaturesByTrackId[track.id] || DEFAULT_AUDIO_FEATURES, context, target))
     .map((track) => {
       const features = audioFeaturesByTrackId[track.id] || DEFAULT_AUDIO_FEATURES;
       const similarity = clamp(1 - tasteDistance(target, features) / 1.5, 0, 1);
@@ -503,6 +536,7 @@ async function buildKnownPoolRescueTracks(
   const audioFeaturesByTrackId = await getAudioFeatures(filteredPool.map((track) => track.id));
 
   return filteredPool
+    .filter((track) => familiarTrackFitsContext(audioFeaturesByTrackId[track.id] || DEFAULT_AUDIO_FEATURES, context, target))
     .map((track) => {
       const features = audioFeaturesByTrackId[track.id] || DEFAULT_AUDIO_FEATURES;
       const similarity = clamp(1 - tasteDistance(target, features) / 1.55, 0, 1);
