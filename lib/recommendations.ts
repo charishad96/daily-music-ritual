@@ -789,21 +789,46 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
   }
 
   if (finalTracks.length < MIN_TARGET_BATCH) {
-    const knownPoolTopUp = await buildKnownPoolRescueTracks(
-      source,
-      context,
-      target,
-      dailySalt,
-      [...(context.excludeTrackIds || []), ...finalTracks.map((track) => track.id)]
+    const topUpQueries = [
+      context.mood === "calm"
+        ? "ambient"
+        : context.mood === "focused"
+          ? "instrumental electronic"
+          : context.mood === "energetic"
+            ? "indie dance"
+            : context.mood === "melancholic"
+              ? "slowcore"
+              : "indie soul",
+      context.energyLevel === "high" ? "upbeat" : context.energyLevel === "low" ? "soft" : "midtempo"
+    ];
+    const topUpSearchGroups = await Promise.all(
+      topUpQueries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
     );
+    const topUpCandidates = uniqueTracks(topUpSearchGroups.flat())
+      .filter((track) => ![...(context.excludeTrackIds || []), ...finalTracks.map((existing) => existing.id)].includes(track.id))
+      .slice(0, 16)
+      .map((track, index) => ({
+        ...track,
+        score: 0.28 - index * 0.001,
+        similarity: 0.4,
+        novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
+        contextFit: 0.44,
+        reason: {
+          headline: "Top-up discovery",
+          detail: "The first pass was too thin, so this batch was widened slightly to keep it fresh and usable."
+        }
+      } satisfies RankedTrack));
 
-    const toppedUp = appendUniqueRankedTracks(finalTracks, knownPoolTopUp, 18);
+    const toppedUp = appendUniqueRankedTracks(finalTracks, topUpCandidates, 18);
 
     if (toppedUp.length > finalTracks.length) {
       return {
         profileSummary: {
-          dominantGenres: profile.dominantGenres,
-          averageFeatures: profile.averageFeatures
+          dominantGenres: queries.slice(0, 5),
+          averageFeatures: {
+            energy: target.energy,
+            valence: target.valence
+          }
         },
         tracks: toppedUp
       };
