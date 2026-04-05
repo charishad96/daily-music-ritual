@@ -57,8 +57,8 @@ h3 {
 
 .vinyl-record {
   position: relative;
-  width: 232px;
-  height: 232px;
+  width: 182px;
+  height: 182px;
   border-radius: 9999px;
   background:
     radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.14) 0 1px, transparent 1px 100%),
@@ -159,4 +159,18 @@ h3 {
   padding-left: 1rem;
   padding-right: 1rem;
   animation: source-marquee 28s linear infinite;
+}
+
+@media (min-width: 640px) {
+  .vinyl-record {
+    width: 212px;
+    height: 212px;
+  }
+}
+
+@media (min-width: 768px) {
+  .vinyl-record {
+    width: 232px;
+    height: 232px;
+  }
 }

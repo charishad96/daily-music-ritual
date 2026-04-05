@@ -134,38 +134,38 @@ export function Dashboard() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-7xl flex-col px-5 pb-12 pt-6 md:px-8">
-      <section className="relative overflow-hidden rounded-[2.4rem] border border-white/60 bg-white/55 px-6 py-7 shadow-halo md:px-10 md:py-10">
+      <section className="relative overflow-hidden rounded-[2rem] border border-white/60 bg-white/55 px-5 py-6 shadow-halo sm:px-6 sm:py-7 md:rounded-[2.4rem] md:px-10 md:py-10">
         <div className="absolute inset-y-0 right-0 hidden w-1/3 bg-gradient-to-l from-gold/10 via-gold/5 to-transparent md:block" />
         <div className="absolute -right-16 top-10 hidden h-72 w-72 rounded-full bg-gold/10 blur-3xl lg:block" />
-        <div className="relative grid gap-10 xl:grid-cols-[minmax(0,1.15fr)_420px]">
+        <div className="relative grid gap-8 md:gap-10 xl:grid-cols-[minmax(0,1.15fr)_420px]">
           <div className="max-w-3xl">
             <p className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-dusk/65">
               Daily Music Ritual
             </p>
-            <h1 className="max-w-3xl text-[3.2rem] leading-[0.94] text-dusk md:text-[5.3rem]">
+            <h1 className="max-w-3xl text-[2.3rem] leading-[0.94] text-dusk sm:text-[2.8rem] md:text-[5.3rem]">
               Break free from the loop.
             </h1>
-            <p className="mt-6 max-w-2xl text-base leading-8 text-ink/76 md:text-lg">
+            <p className="mt-5 max-w-2xl text-[0.98rem] leading-7 text-ink/76 md:mt-6 md:text-lg md:leading-8">
               Spotify is brilliant at holding almost every song. What it is far less brilliant at, for most of us, is
               helping us move beyond the same small circle of artists and tracks we already know.
             </p>
-            <p className="mt-5 max-w-2xl text-base leading-8 text-ink/72">
+            <p className="mt-4 max-w-2xl text-[0.98rem] leading-7 text-ink/72 md:mt-5 md:text-base md:leading-8">
               This is what we are solving. You connect your Spotify account so the app can understand your listening
               profile, choose the mood you want right now, and it looks outward for fresher signals instead of staying
               trapped inside Spotify&apos;s own recommendation loop. Then it brings the final picks straight back to Spotify,
               ready to play or save in one click.
             </p>
-            <div className="mt-8">
+            <div className="mt-6 md:mt-8">
               <div className="mb-3 text-[0.68rem] uppercase tracking-[0.24em] text-dusk/48">Outside Spotify</div>
               <SourceMarquee />
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-6 xl:items-end">
+          <div className="flex flex-col items-center gap-4 md:gap-6 xl:items-end">
             <VinylDisplay />
-            <div className="glass w-full max-w-[420px] rounded-[1.7rem] border border-white/70 px-5 py-5 text-sm text-ink/70">
+            <div className="glass w-full max-w-[420px] rounded-[1.5rem] border border-white/70 px-4 py-4 text-sm text-ink/70 md:rounded-[1.7rem] md:px-5 md:py-5">
               <div className="text-xs uppercase tracking-[0.24em] text-dusk/60">{formatDateLabel()}</div>
-              <div className="mt-3 text-2xl font-semibold text-dusk">
+              <div className="mt-3 text-xl font-semibold text-dusk md:text-2xl">
                 {bootstrap?.restricted ? "Spotify account access blocked" : bootstrap?.authenticated ? "Ready to generate" : "Connect Spotify first"}
               </div>
               <div className="mt-3 max-w-sm leading-6">
@@ -372,7 +372,7 @@ export function Dashboard() {
 
 function VinylDisplay() {
   return (
-    <div className="relative flex h-[320px] w-full max-w-[420px] items-center justify-center overflow-hidden rounded-[2rem] border border-white/70 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.96),rgba(244,238,228,0.88)_55%,rgba(227,215,196,0.65))] shadow-halo">
+    <div className="relative flex h-[240px] w-full max-w-[420px] items-center justify-center overflow-hidden rounded-[1.7rem] border border-white/70 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.96),rgba(244,238,228,0.88)_55%,rgba(227,215,196,0.65))] shadow-halo sm:h-[280px] md:h-[320px] md:rounded-[2rem]">
       <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.2),transparent_40%,rgba(27,52,66,0.08))]" />
       <div className="vinyl-record">
         <div className="vinyl-rings" />
@@ -391,12 +391,12 @@ function SourceMarquee() {
   const items = [...sourceWorlds, ...sourceWorlds];
 
   return (
-    <div className="source-marquee rounded-[1.5rem] border border-dusk/10 bg-white/62 py-3">
+    <div className="source-marquee rounded-[1.2rem] border border-dusk/10 bg-white/62 py-2.5 md:rounded-[1.5rem] md:py-3">
       <div className="source-marquee-track">
         {items.map((item, index) => (
           <span
             key={`${item}-${index}`}
-            className="inline-flex items-center rounded-full border border-dusk/10 bg-white px-4 py-2 text-[0.72rem] uppercase tracking-[0.2em] text-dusk/72 shadow-[0_8px_24px_rgba(22,31,34,0.06)]"
+            className="inline-flex items-center rounded-full border border-dusk/10 bg-white px-3 py-2 text-[0.66rem] uppercase tracking-[0.18em] text-dusk/72 shadow-[0_8px_24px_rgba(22,31,34,0.06)] md:px-4 md:text-[0.72rem] md:tracking-[0.2em]"
           >
             {item}
           </span>
