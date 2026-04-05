@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { ReactNode } from "react";
 import { formatDateLabel } from "@/lib/utils";
@@ -422,30 +421,12 @@ function SegmentedRow<T extends string>({
 }
 
 function TrackCard({ track, index }: { track: RankedTrack; index: number }) {
-  const cover = track.album.images?.[0]?.url;
-
   return (
-    <article className="glass rounded-[1.8rem] border border-white/70 p-4 md:p-5">
-      <div className="grid gap-4 md:grid-cols-[auto_minmax(0,1fr)_290px]">
-        <div className="flex items-start gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-dusk text-sm font-semibold text-white">
-            {index + 1}
-          </div>
-          {cover ? (
-            <Image src={cover} alt={track.album.name} width={84} height={84} className="h-20 w-20 rounded-2xl object-cover" />
-          ) : (
-            <div className="h-20 w-20 rounded-2xl bg-dusk/10" />
-          )}
-        </div>
-
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-2xl text-dusk">{track.name}</h3>
-          </div>
-          <p className="mt-1 text-sm text-ink/68">{track.artists.map((artist) => artist.name).join(", ")}</p>
-        </div>
-
-        <div className="overflow-hidden rounded-[1.3rem] border border-dusk/10 bg-white">
+    <article className="glass relative rounded-[1.8rem] border border-white/70 p-4 md:p-5">
+      <div className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-2xl bg-dusk text-sm font-semibold text-white">
+        {index + 1}
+      </div>
+      <div className="overflow-hidden rounded-[1.5rem] border border-dusk/10 bg-white pl-12">
           <iframe
             title={`${track.name} preview`}
             src={`https://open.spotify.com/embed/track/${track.id}?utm_source=generator`}
@@ -454,7 +435,6 @@ function TrackCard({ track, index }: { track: RankedTrack; index: number }) {
             loading="lazy"
             allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
           />
-        </div>
       </div>
     </article>
   );
