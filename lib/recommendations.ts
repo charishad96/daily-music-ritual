@@ -558,7 +558,7 @@ async function buildSafeRecallTracks(
         contextFit,
         reason: {
           headline: "Comfort-zone anchor",
-          detail: `This is a highly familiar-feeling pick pulled closer to your known listening so the batch can feel safer and more immediately rewarding.`
+          detail: "A proven favorite-zone pick that fits this mood without making you work for it."
         }
       } satisfies RankedTrack;
     })
@@ -626,7 +626,7 @@ async function buildKnownPoolRescueTracks(
         contextFit,
         reason: {
           headline: "Known-pool rescue",
-          detail: "Spotify search came back too thin, so this batch falls back to stronger matches from your own broader listening pool."
+          detail: "Spotify ran thin here, so this one came from the deeper part of your own taste."
         }
       } satisfies RankedTrack;
     })
@@ -775,9 +775,9 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
         contextFit,
         reason: {
           headline: "Light-profile discovery mode",
-          detail: `Spotify gave very little taste history, so this batch leans on your ${context.mood} / ${context.energyLevel} energy vibe${
+          detail: `Spotify gave us very little history, so this pick leans on your ${context.mood} / ${context.energyLevel} energy vibe${
             context.languagePreference !== "any" ? ` with a ${LANGUAGE_LABELS[context.languagePreference].toLowerCase()} bias` : ""
-          } while still trying to stay fresh.`
+          } and still tries to surprise you.`
         }
       } satisfies RankedTrack;
     })
@@ -858,9 +858,9 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
           contextFit: 0.52,
           reason: {
             headline: `${LANGUAGE_LABELS[context.languagePreference]} rescue`,
-            detail: `Your selected language was kept strict, so this smaller batch pulls only from stronger ${LANGUAGE_LABELS[
+            detail: `Language stayed strict here, so this came from the strongest ${LANGUAGE_LABELS[
               context.languagePreference
-            ].toLowerCase()} matches.`
+            ].toLowerCase()} matches we could actually stand behind.`
           }
         }))
       };
@@ -889,7 +889,7 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
           contextFit: 0.44,
           reason: {
             headline: externalSourceFlavor(context).headline,
-            detail: `Your profile was too sparse for a strong first pass, so this batch widens through ${externalSourceFlavor(context).pathLabel} instead of default Spotify loops.`
+            detail: `Your first pass came back thin, so this one widens out through ${externalSourceFlavor(context).pathLabel} instead of the usual Spotify loop.`
           }
         })),
         18,
@@ -925,7 +925,7 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
         contextFit: 0.44,
         reason: {
           headline: "Top-up discovery",
-          detail: "The first pass was too thin, so this batch was widened slightly to keep it fresh and usable."
+          detail: "The first pass was too thin, so this slipped in to keep the batch alive and interesting."
         }
       } satisfies RankedTrack));
 
@@ -1272,28 +1272,28 @@ function explainRecommendation(
 ): RecommendationReason {
   if (novelty > 0.72) {
     return {
-      headline: "Fresh but still aligned",
-      detail: `Less obvious pick with a lower-popularity profile that still matches your ${context.mood}, ${context.energyLevel}-energy lane.`
+      headline: "Fresh, not random",
+      detail: `A less obvious find that still lands cleanly in your ${context.mood}, ${context.energyLevel}-energy lane.`
     };
   }
 
   if (features.energy > 0.72 && context.energyLevel === "high") {
     return {
-      headline: "Built for momentum",
-      detail: "High energy and forward motion make this a strong fit for a more active session."
+      headline: "Instant lift",
+      detail: "All momentum, no drag; this one should hit fast in a higher-energy run."
     };
   }
 
   if (features.acousticness > 0.45 && context.mood === "calm") {
     return {
-      headline: "A softer deep cut",
-      detail: "The calmer acoustic lean keeps it close to your taste while avoiding the obvious tracks."
+      headline: "Soft-focus gem",
+      detail: "It keeps the mood gentle while dodging the obvious songs you already know by heart."
     };
   }
 
   return {
-    headline: profile.dominantGenres[0] ? `Extends your ${profile.dominantGenres[0]} orbit` : "Taste-adjacent discovery",
-    detail: "Its feature profile lands near your saved preferences, but the artist overlap stays intentionally light."
+    headline: profile.dominantGenres[0] ? `Beyond your ${profile.dominantGenres[0]} orbit` : "Taste-adjacent spark",
+    detail: "Close enough to click immediately, different enough to feel like a real find."
   };
 }
 
