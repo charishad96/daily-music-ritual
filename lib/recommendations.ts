@@ -452,6 +452,22 @@ function externalSourceSearchQueries(context: ContextInput, genreHints: string[]
   ).slice(0, 7);
 }
 
+function externalSourceFlavor(context: ContextInput) {
+  if (context.mood === "calm" || context.mood === "focused" || context.mood === "melancholic") {
+    return {
+      headline: "Cinematic detour",
+      detail: "This widens the batch through soundtrack and listening-room style cues instead of default Spotify graph loops.",
+      pathLabel: "soundtrack and listening-room style cues"
+    };
+  }
+
+  return {
+    headline: "Bandcamp-style discovery",
+    detail: "This widens the batch through more leftfield editorial and indie-digging cues instead of default Spotify graph loops.",
+    pathLabel: "leftfield editorial and indie-digging cues"
+  };
+}
+
 function buildFamiliaritySets(source: ProfileSource) {
   return {
     topTrackIds: new Set(source.topTracks.map((track) => track.id)),
@@ -623,9 +639,10 @@ async function buildSearchTopUpTracks(
   context: ContextInput,
   excludeTrackIds: string[],
   dailySalt: string,
-  headline = "Fresh top-up",
-  detail = "The first pass was too thin, so this batch was widened with adjacent discovery picks instead of falling back to your current rotation."
+  headline?: string,
+  detail?: string
 ) {
+  const flavor = externalSourceFlavor(context);
   const searchGroups = await Promise.all(
     queries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
   );
@@ -640,8 +657,8 @@ async function buildSearchTopUpTracks(
       novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
       contextFit: 0.46,
       reason: {
-        headline,
-        detail
+        headline: headline || flavor.headline,
+        detail: detail || flavor.detail
       }
     } satisfies RankedTrack));
 }
@@ -801,9 +818,7 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
       externalSourceSearchQueries(context, queries.slice(0, 2)),
       context,
       [...(context.excludeTrackIds || []), ...finalTracks.map((existing) => existing.id)],
-      `${dailySalt}:context-topup`,
-      "External-inspired top-up",
-      "The first pass was too thin, so this batch was widened with Bandcamp/editorial and cinematic-style discovery cues."
+      `${dailySalt}:context-topup`
     );
 
     const toppedUp = appendUniqueRankedTracks(finalTracks, topUpCandidates, 18, normalize(context.familiarity, 0, 100));
@@ -873,8 +888,8 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
           novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
           contextFit: 0.44,
           reason: {
-            headline: "External-inspired rescue",
-            detail: "Your profile was too sparse for a strong first pass, so this batch widens through Bandcamp/editorial and soundtrack-style discovery instead of failing silently."
+            headline: externalSourceFlavor(context).headline,
+            detail: `Your profile was too sparse for a strong first pass, so this batch widens through ${externalSourceFlavor(context).pathLabel} instead of default Spotify loops.`
           }
         })),
         18,
@@ -1486,9 +1501,7 @@ export async function generateDailyRecommendations(context: ContextInput) {
       externalSourceSearchQueries(context, profile.dominantGenres.slice(0, 2)),
       context,
       [...(context.excludeTrackIds || []), ...finalTracks.map((track) => track.id)],
-      `${dailySalt}:topup`,
-      "External-inspired top-up",
-      "This batch was widened with Bandcamp/editorial and cinematic-style discovery cues to avoid repetitive Spotify-only fallback."
+      `${dailySalt}:topup`
     );
 
     const knownPoolTopUp =
