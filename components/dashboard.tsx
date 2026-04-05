@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { ReactNode } from "react";
 import { formatDateLabel } from "@/lib/utils";
