@@ -86,6 +86,29 @@ const LANGUAGE_LABELS: Record<ContextInput["languagePreference"], string> = {
 const MIN_LANGUAGE_BATCH = 5;
 const MIN_TARGET_BATCH = 12;
 
+const EXTERNAL_SOURCE_WORLDS: Record<ContextInput["mood"], { bandcamp: string[]; soundtrack: string[] }> = {
+  calm: {
+    bandcamp: ["ambient bandcamp", "dream pop bandcamp", "modern classical bandcamp"],
+    soundtrack: ["cinematic ambient", "library music", "film score mood"]
+  },
+  focused: {
+    bandcamp: ["instrumental electronic bandcamp", "minimal electronic bandcamp", "leftfield instrumental"],
+    soundtrack: ["minimal soundtrack", "instrumental score", "tension soundtrack"]
+  },
+  energetic: {
+    bandcamp: ["dance punk bandcamp", "leftfield disco bandcamp", "post punk dance"],
+    soundtrack: ["adrenaline soundtrack", "action soundtrack electronic", "chase scene soundtrack"]
+  },
+  melancholic: {
+    bandcamp: ["slowcore bandcamp", "chamber pop bandcamp", "indie folk bandcamp"],
+    soundtrack: ["melancholic soundtrack", "cinematic indie", "romantic drama soundtrack"]
+  },
+  social: {
+    bandcamp: ["nu disco bandcamp", "indie soul bandcamp", "world groove bandcamp"],
+    soundtrack: ["party soundtrack", "funk soundtrack", "late night groove soundtrack"]
+  }
+};
+
 const LANGUAGE_LEXICAL_SEEDS: Record<Exclude<ContextInput["languagePreference"], "any">, string[]> = {
   english: ["love", "night", "heart", "dream"],
   greek: ["αγαπη", "καρδια", "ονειρο", "νυχτα"],
@@ -399,6 +422,36 @@ function contextOnlySearchQueries(context: ContextInput) {
   ].filter(Boolean) as string[];
 }
 
+function externalSourceSearchQueries(context: ContextInput, genreHints: string[] = []) {
+  const worlds = EXTERNAL_SOURCE_WORLDS[context.mood];
+  const energyHints =
+    context.energyLevel === "high"
+      ? ["high energy", "club", "driving"]
+      : context.energyLevel === "low"
+        ? ["soft", "slow", "intimate"]
+        : ["midtempo", "warm", "moody"];
+
+  return uniqueBy(
+    [
+      ...genreHints.slice(0, 2).map((genre) => `${genre} ${context.mood}`),
+      ...worlds.bandcamp,
+      ...worlds.soundtrack,
+      ...energyHints.map((hint) => `${context.mood} ${hint}`),
+      context.mood === "energetic"
+        ? "festival oddities"
+        : context.mood === "calm"
+          ? "listening bar morning"
+          : context.mood === "focused"
+            ? "listening bar instrumental"
+            : context.mood === "melancholic"
+              ? "arthouse soundtrack"
+              : "late night listening bar",
+      ...LANGUAGE_QUERY_HINTS[context.languagePreference]
+    ].filter(Boolean) as string[],
+    (query) => normalizeComparableText(query)
+  ).slice(0, 7);
+}
+
 function buildFamiliaritySets(source: ProfileSource) {
   return {
     topTrackIds: new Set(source.topTracks.map((track) => track.id)),
@@ -596,21 +649,32 @@ async function buildSearchTopUpTracks(
 function appendUniqueRankedTracks(
   base: RankedTrack[],
   additions: RankedTrack[],
-  targetCount = 24
+  targetCount = 24,
+  safety = 0.4
+) {
+  return finalizeRankedTracks([...base, ...additions], targetCount, safety);
+}
+
+function finalizeRankedTracks(
+  tracks: RankedTrack[],
+  targetCount = 24,
+  safety = 0.4
 ) {
   const artistCap = new Map<string, number>();
   const trackKeyCap = new Set<string>();
   const titleCap = new Map<string, number>();
   const merged: RankedTrack[] = [];
+  const artistLimit = safety >= 0.78 ? 2 : 1;
+  const titleLimit = 1;
 
-  for (const track of [...base, ...additions]) {
+  for (const track of tracks) {
     const leadArtistId = track.artists[0]?.id;
     const currentCount = leadArtistId ? artistCap.get(leadArtistId) || 0 : 0;
     const trackKey = canonicalTrackKey(track);
     const titleKey = canonicalTitleKey(track);
     const titleCount = titleCap.get(titleKey) || 0;
 
-    if (leadArtistId && currentCount >= 2) {
+    if (leadArtistId && currentCount >= artistLimit) {
       continue;
     }
 
@@ -618,7 +682,7 @@ function appendUniqueRankedTracks(
       continue;
     }
 
-    if (titleCount >= 1) {
+    if (titleCount >= titleLimit) {
       continue;
     }
 
@@ -733,37 +797,16 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
   }
 
   if (finalTracks.length > 0 && finalTracks.length < MIN_TARGET_BATCH) {
-    const topUpQueries = [
-      context.mood === "calm"
-        ? "ambient"
-        : context.mood === "focused"
-          ? "instrumental electronic"
-          : context.mood === "energetic"
-            ? "indie dance"
-            : context.mood === "melancholic"
-              ? "slowcore"
-              : "indie soul",
-      context.energyLevel === "high" ? "upbeat" : context.energyLevel === "low" ? "soft" : "midtempo"
-    ];
-    const topUpSearchGroups = await Promise.all(
-      topUpQueries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
+    const topUpCandidates = await buildSearchTopUpTracks(
+      externalSourceSearchQueries(context, queries.slice(0, 2)),
+      context,
+      [...(context.excludeTrackIds || []), ...finalTracks.map((existing) => existing.id)],
+      `${dailySalt}:context-topup`,
+      "External-inspired top-up",
+      "The first pass was too thin, so this batch was widened with Bandcamp/editorial and cinematic-style discovery cues."
     );
-    const topUpCandidates = uniqueTracks(topUpSearchGroups.flat())
-      .filter((track) => ![...(context.excludeTrackIds || []), ...finalTracks.map((existing) => existing.id)].includes(track.id))
-      .slice(0, 16)
-      .map((track, index) => ({
-        ...track,
-        score: 0.28 - index * 0.001,
-        similarity: 0.4,
-        novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
-        contextFit: 0.44,
-        reason: {
-          headline: "Top-up discovery",
-          detail: "The first pass was too thin, so this batch was widened slightly to keep it fresh and usable."
-        }
-      } satisfies RankedTrack));
 
-    const toppedUp = appendUniqueRankedTracks(finalTracks, topUpCandidates, 18);
+    const toppedUp = appendUniqueRankedTracks(finalTracks, topUpCandidates, 18, normalize(context.familiarity, 0, 100));
 
     return {
       profileSummary: {
@@ -773,7 +816,7 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
           valence: target.valence
         }
       },
-      tracks: toppedUp
+      tracks: finalizeRankedTracks(toppedUp, 18, normalize(context.familiarity, 0, 100))
     };
   }
 
@@ -808,18 +851,7 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
       };
     }
 
-    const widenedQueries = [
-      context.mood === "calm"
-        ? "ambient"
-        : context.mood === "focused"
-          ? "instrumental electronic"
-          : context.mood === "energetic"
-            ? "indie dance"
-            : context.mood === "melancholic"
-              ? "slowcore"
-              : "indie soul",
-      context.energyLevel === "high" ? "upbeat" : context.energyLevel === "low" ? "soft" : "midtempo"
-    ];
+    const widenedQueries = externalSourceSearchQueries(context, queries.slice(0, 2));
     const widenedSearchGroups = await Promise.all(
       widenedQueries.map((query) => swallowSpotify403(() => searchTracks(query, 10), []))
     );
@@ -833,17 +865,21 @@ async function buildContextOnlyRecommendations(context: ContextInput) {
           valence: target.valence
         }
       },
-      tracks: widenedTracks.map((track, index) => ({
-        ...track,
-        score: 0.32 - index * 0.001,
-        similarity: 0.42,
-        novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
-        contextFit: 0.44,
-        reason: {
-          headline: "Recovery fallback",
-          detail: "Your profile was too sparse for a strong first pass, so this batch widens the search instead of failing silently."
-        }
-      }))
+      tracks: finalizeRankedTracks(
+        widenedTracks.map((track, index) => ({
+          ...track,
+          score: 0.32 - index * 0.001,
+          similarity: 0.42,
+          novelty: clamp(1 - normalize(track.popularity, 20, 90), 0, 1),
+          contextFit: 0.44,
+          reason: {
+            headline: "External-inspired rescue",
+            detail: "Your profile was too sparse for a strong first pass, so this batch widens through Bandcamp/editorial and soundtrack-style discovery instead of failing silently."
+          }
+        })),
+        18,
+        normalize(context.familiarity, 0, 100)
+      )
     };
   }
 
@@ -1368,7 +1404,7 @@ export async function generateDailyRecommendations(context: ContextInput) {
           dominantGenres: profile.dominantGenres,
           averageFeatures: profile.averageFeatures
         },
-        tracks: knownPoolRescue
+        tracks: finalizeRankedTracks(knownPoolRescue, 18, safety)
       };
     }
 
@@ -1400,26 +1436,11 @@ export async function generateDailyRecommendations(context: ContextInput) {
           dominantGenres: profile.dominantGenres,
           averageFeatures: profile.averageFeatures
         },
-        tracks: rescueTracks
+        tracks: finalizeRankedTracks(rescueTracks, 18, safety)
       };
     }
 
-    const emergencyQueries = [
-      profile.dominantGenres[0],
-      profile.dominantGenres[1],
-      context.mood === "focused"
-        ? "indie alternative"
-        : context.mood === "calm"
-          ? "dream pop"
-          : context.mood === "energetic"
-            ? "dance rock"
-            : context.mood === "melancholic"
-              ? "art pop"
-              : "nu disco",
-      ...LANGUAGE_QUERY_HINTS[context.languagePreference]
-    ]
-      .filter(Boolean)
-      .slice(0, isLanguageLocked(context.languagePreference) ? 4 : 5) as string[];
+    const emergencyQueries = externalSourceSearchQueries(context, profile.dominantGenres.slice(0, 2));
 
     const emergencySearchGroups = await Promise.all(
       emergencyQueries.map((query) => swallowSpotify403(() => searchTracks(query, 30), []))
@@ -1456,30 +1477,18 @@ export async function generateDailyRecommendations(context: ContextInput) {
         dominantGenres: profile.dominantGenres,
         averageFeatures: profile.averageFeatures
       },
-      tracks: emergencyRanked
+      tracks: finalizeRankedTracks(emergencyRanked, 18, safety)
     };
   }
 
   if (finalTracks.length < MIN_TARGET_BATCH) {
-    const topUpQueries = [
-      profile.dominantGenres[0],
-      profile.dominantGenres[1],
-      context.mood === "focused"
-        ? "indie alternative"
-        : context.mood === "calm"
-          ? "dream pop"
-          : context.mood === "energetic"
-            ? "indie dance"
-            : context.mood === "melancholic"
-              ? "art pop"
-              : "nu disco",
-    ].filter(Boolean) as string[];
-
     const searchTopUp = await buildSearchTopUpTracks(
-      topUpQueries,
+      externalSourceSearchQueries(context, profile.dominantGenres.slice(0, 2)),
       context,
       [...(context.excludeTrackIds || []), ...finalTracks.map((track) => track.id)],
-      `${dailySalt}:topup`
+      `${dailySalt}:topup`,
+      "External-inspired top-up",
+      "This batch was widened with Bandcamp/editorial and cinematic-style discovery cues to avoid repetitive Spotify-only fallback."
     );
 
     const knownPoolTopUp =
@@ -1497,14 +1506,14 @@ export async function generateDailyRecommendations(context: ContextInput) {
           )
         : [];
 
-    const toppedUp = appendUniqueRankedTracks(finalTracks, [...searchTopUp, ...knownPoolTopUp], 18);
+    const toppedUp = appendUniqueRankedTracks(finalTracks, [...searchTopUp, ...knownPoolTopUp], 18, safety);
 
     return {
       profileSummary: {
         dominantGenres: profile.dominantGenres,
         averageFeatures: profile.averageFeatures
       },
-      tracks: toppedUp
+      tracks: finalizeRankedTracks(toppedUp, 18, safety)
     };
   }
 
@@ -1513,7 +1522,7 @@ export async function generateDailyRecommendations(context: ContextInput) {
       dominantGenres: profile.dominantGenres,
       averageFeatures: profile.averageFeatures
     },
-    tracks: finalTracks
+    tracks: finalizeRankedTracks(finalTracks, 24, safety)
   };
 }
 
