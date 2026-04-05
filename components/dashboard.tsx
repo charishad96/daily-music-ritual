@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { ReactNode } from "react";
 import { formatDateLabel } from "@/lib/utils";
-import type { BootstrapResponse, ContextInput, LanguagePreference, RankedTrack } from "@/types";
+import type { BootstrapResponse, ContextInput, RankedTrack } from "@/types";
 
 const defaultContext: ContextInput = {
   mood: "focused",
@@ -27,13 +27,6 @@ const decadeOptions = [
   { value: "2010s", label: "2010s" },
   { value: "new", label: "New releases" }
 ] as const;
-const languageOptions: { value: LanguagePreference; label: string }[] = [
-  { value: "any", label: "Any language" },
-  { value: "english", label: "English" },
-  { value: "greek", label: "Greek" },
-  { value: "spanish", label: "Spanish" },
-  { value: "portuguese", label: "Portuguese" }
-];
 
 export function Dashboard() {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
@@ -57,6 +50,9 @@ export function Dashboard() {
       const response = await fetch("/api/recommendations", { method: "GET" });
       const data = (await response.json()) as BootstrapResponse;
       setBootstrap(data);
+      if (data.restricted && data.restrictionReason) {
+        setError(data.restrictionReason);
+      }
     });
   }, []);
 
@@ -162,13 +158,15 @@ export function Dashboard() {
           </div>
           <div className="glass rounded-[1.5rem] border border-white/70 px-5 py-4 text-sm text-ink/70">
             <div className="text-xs uppercase tracking-[0.24em] text-dusk/60">{formatDateLabel()}</div>
-            <div className="mt-2 text-2xl font-semibold text-dusk">
-              {bootstrap?.authenticated ? "Ready to generate" : "Connect Spotify first"}
+              <div className="mt-2 text-2xl font-semibold text-dusk">
+              {bootstrap?.restricted ? "Spotify account access blocked" : bootstrap?.authenticated ? "Ready to generate" : "Connect Spotify first"}
+              </div>
+              <div className="mt-2 max-w-sm leading-6">
+              {bootstrap?.restricted
+                ? "This Spotify account signed in, but Spotify did not grant this app enough API access yet."
+                : "Keep the controls light, then pull a batch you can actually use right now."}
+              </div>
             </div>
-            <div className="mt-2 max-w-sm leading-6">
-              Keep the controls light, then pull a batch you can actually use right now.
-            </div>
-          </div>
         </div>
       </section>
 
@@ -271,30 +269,6 @@ export function Dashboard() {
                 </div>
               </ControlGroup>
 
-              <ControlGroup label="Language">
-                <div className="grid grid-cols-2 gap-2">
-                  {languageOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() =>
-                        setContext((current) => ({
-                          ...current,
-                          languagePreference: option.value
-                        }))
-                      }
-                      className={`rounded-2xl border px-3 py-2 text-sm transition ${
-                        context.languagePreference === option.value
-                          ? "border-dusk bg-dusk text-white"
-                          : "border-dusk/12 bg-white/70 text-ink/68 hover:border-dusk/25"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </ControlGroup>
-
               <ControlGroup label="Familiarity">
                 <input
                   type="range"
@@ -378,7 +352,6 @@ export function Dashboard() {
                   <h2 className="mt-1 text-3xl text-dusk">Build a focused set of deep cuts</h2>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/68">
                     Current profile: {context.mood}, {context.timeOfDay}, {context.energyLevel} energy
-                    {context.languagePreference !== "any" ? `, ${context.languagePreference}-leaning` : ""}
                     {selectedPlaylistNames.length ? `, seeded with ${selectedPlaylistNames.join(", ")}` : ""}
                     {friendSignalsSummary
                       ? `, plus ${friendSignalsSummary} friend vibe ${friendSignalsSummary === 1 ? "signal" : "signals"}`
@@ -393,7 +366,7 @@ export function Dashboard() {
                       setRefreshCount(next);
                       void runRecommendations(next);
                     }}
-                    disabled={isLoading}
+                    disabled={isLoading || Boolean(bootstrap?.restricted)}
                     className="rounded-full bg-dusk px-5 py-3 text-sm font-semibold text-white transition hover:bg-dusk/90 disabled:opacity-60"
                   >
                     {isLoading ? "Generating..." : tracks.length ? "New batch" : "Generate recommendations"}
